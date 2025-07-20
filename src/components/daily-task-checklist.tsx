@@ -48,6 +48,7 @@ export default function DailyTaskChecklist() {
   const [modalData, setModalData] = useState<CompletionModalData | null>(null);
   const [userName, setUserName] = useState<string>("");
   const [view, setView] = useState<'pet' | 'activity' | 'log'>('pet');
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Load today's task completion status
   useEffect(() => {
@@ -332,7 +333,11 @@ export default function DailyTaskChecklist() {
   };
 
   const handleUndoComplete = async (task: DailyTask) => {
-    if (!user) return;
+    console.log("handleUndoComplete called for task:", task);
+    if (!user) {
+      console.log("No user, returning");
+      return;
+    }
 
     try {
       // Delete the task log entry for today
@@ -340,6 +345,15 @@ export default function DailyTaskChecklist() {
       today.setHours(0, 0, 0, 0);
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
+
+      console.log("Deleting task log with criteria:", {
+        task_id: task.task_id,
+        pet_id: task.pet_id,
+        date_range: {
+          from: today.toISOString(),
+          to: tomorrow.toISOString()
+        }
+      });
 
       const { error } = await supabase
         .from("task_logs")
@@ -351,7 +365,9 @@ export default function DailyTaskChecklist() {
 
       if (error) {
         console.error("Failed to undo task completion:", error);
+        alert(`Failed to uncomplete task: ${error.message}`);
       } else {
+        console.log("Task log deleted successfully, updating local state");
         // Update local state
         setDailyTasks(prev => prev.map(t => 
           t.id === task.id
@@ -367,9 +383,11 @@ export default function DailyTaskChecklist() {
         
         // Trigger a global refresh to update logs
         triggerRefresh();
+        console.log("Local state updated and refresh triggered");
       }
     } catch (error) {
       console.error("Error undoing task completion:", error);
+      alert(`Error uncompleting task: ${error}`);
     }
   };
 
@@ -563,12 +581,19 @@ export default function DailyTaskChecklist() {
                                           Click to complete
                                         </span>
                                         <button
-                                          onClick={e => { 
+                                          onClick={async (e) => { 
+                                            e.stopPropagation();
+                                            if (isProcessing) return;
                                             console.log("Lightning bolt clicked for task:", task);
-                                            e.stopPropagation(); 
-                                            handleQuickComplete(task); 
+                                            setIsProcessing(true);
+                                            try {
+                                              await handleQuickComplete(task);
+                                            } finally {
+                                              setIsProcessing(false);
+                                            }
                                           }}
-                                          className="text-gray-400 hover:text-green-600 transition-colors text-lg"
+                                          disabled={isProcessing}
+                                          className="text-gray-400 hover:text-green-600 transition-colors text-lg disabled:opacity-50"
                                           title="Quick complete"
                                           type="button"
                                         >
@@ -749,11 +774,19 @@ export default function DailyTaskChecklist() {
                               Click to complete
                             </span>
                             <button
-                              onClick={(e) => {
+                              onClick={async (e) => {
                                 e.stopPropagation();
-                                handleQuickComplete(task);
+                                if (isProcessing) return;
+                                console.log("Mobile lightning bolt clicked for task:", task);
+                                setIsProcessing(true);
+                                try {
+                                  await handleQuickComplete(task);
+                                } finally {
+                                  setIsProcessing(false);
+                                }
                               }}
-                              className="text-gray-400 hover:text-green-600 transition-colors"
+                              disabled={isProcessing}
+                              className="text-gray-400 hover:text-green-600 transition-colors disabled:opacity-50"
                               title="Quick complete (no notes)"
                             >
                               ⚡
@@ -774,7 +807,7 @@ export default function DailyTaskChecklist() {
         <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 bg-black/30 z-40" />
-            <Dialog.Content className="fixed bottom-0 left-0 right-0 bg-white p-6 rounded-t-2xl z-50 max-h-[80vh] overflow-y-auto pb-16 sm:pb-8">
+            <Dialog.Content className="fixed bottom-0 left-0 right-0 bg-white p-6 rounded-t-2xl z-50 max-h-[80vh] overflow-y-auto pb-24 sm:pb-8">
               <Dialog.Title className="text-lg font-bold mb-4">
                 {modalData && dailyTasks.find(task => task.id === modalData.petTaskId)?.completed 
                   ? "Edit Task Completion" 
@@ -845,46 +878,75 @@ export default function DailyTaskChecklist() {
                     />
                   </div>
 
-                  <div className="flex gap-3 pt-4 pb-4">
+                  <div className="flex gap-3 pt-4 pb-8 items-stretch">
                     <button
                       onClick={() => setModalOpen(false)}
-                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
+                      className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium"
                     >
                       Cancel
                     </button>
                     {modalData && dailyTasks.find(task => task.id === modalData.petTaskId)?.completed ? (
                       <>
                         <button
-                          onClick={() => {
+                          onClick={async () => {
+                            if (isProcessing) return;
                             console.log("Update Task button clicked");
-                            handleCompleteTask();
-                          }}
-                          className="flex-1 px-4 py-2 bg-black text-white rounded-lg"
-                        >
-                          Update Task
-                        </button>
-                        <button
-                          onClick={() => {
-                            const task = dailyTasks.find(t => t.id === modalData.petTaskId);
-                            if (task) {
-                              handleUndoComplete(task);
+                            setIsProcessing(true);
+                            try {
+                              await handleCompleteTask();
                               setModalOpen(false);
+                            } finally {
+                              setIsProcessing(false);
                             }
                           }}
-                          className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg"
+                          disabled={isProcessing}
+                          className="flex-1 px-4 py-3 bg-black text-white rounded-lg text-sm font-medium disabled:opacity-50"
                         >
-                          Uncomplete
+                          {isProcessing ? "Processing..." : "Update Task"}
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (isProcessing) return;
+                            console.log("Uncomplete button clicked");
+                            setIsProcessing(true);
+                            const task = dailyTasks.find(t => t.id === modalData.petTaskId);
+                            console.log("Found task for uncomplete:", task);
+                            if (task) {
+                              try {
+                                // Don't close modal immediately on mobile - wait for operation to complete
+                                await handleUndoComplete(task);
+                                setModalOpen(false);
+                              } finally {
+                                setIsProcessing(false);
+                              }
+                            } else {
+                              console.error("Task not found for uncomplete");
+                              setIsProcessing(false);
+                            }
+                          }}
+                          disabled={isProcessing}
+                          className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                        >
+                          {isProcessing ? "Processing..." : "Uncomplete"}
                         </button>
                       </>
                     ) : (
                       <button
-                        onClick={() => {
+                        onClick={async () => {
+                          if (isProcessing) return;
                           console.log("Complete Task button clicked");
-                          handleCompleteTask();
+                          setIsProcessing(true);
+                          try {
+                            await handleCompleteTask();
+                            setModalOpen(false);
+                          } finally {
+                            setIsProcessing(false);
+                          }
                         }}
-                        className="flex-1 px-4 py-2 bg-black text-white rounded-lg"
+                        disabled={isProcessing}
+                        className="flex-1 px-4 py-3 bg-black text-white rounded-lg text-sm font-medium disabled:opacity-50"
                       >
-                        Complete Task
+                        {isProcessing ? "Processing..." : "Complete Task"}
                       </button>
                     )}
                   </div>
