@@ -18,6 +18,7 @@ export default function DashboardPage() {
   const [showSignIn, setShowSignIn] = useState(false);
   const signInTimeout = useRef<NodeJS.Timeout | null>(null);
   const [userRecordError, setUserRecordError] = useState<string | null>(null);
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
 
   // Debug logging
   console.log("Dashboard render:", {
@@ -123,6 +124,20 @@ export default function DashboardPage() {
     };
   }, [user, loading]);
 
+  // Add timeout protection for loading states
+  useEffect(() => {
+    if (loading || (user && !userRecord && !loading)) {
+      const timeoutId = setTimeout(() => {
+        console.log("Dashboard: Loading timeout triggered");
+        setLoadingTimeout(true);
+      }, 10000); // 10 second timeout
+      
+      return () => clearTimeout(timeoutId);
+    } else {
+      setLoadingTimeout(false);
+    }
+  }, [loading, user, userRecord]);
+
   // Show loading state with timeout protection
   if (loading) {
     return (
@@ -130,6 +145,9 @@ export default function DashboardPage() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black mx-auto"></div>
           <p className="mt-2 text-gray-600">Loading...</p>
+          {loadingTimeout && (
+            <p className="text-xs text-orange-600 mt-1">Loading is taking longer than expected</p>
+          )}
           <p className="text-xs text-gray-500 mt-1">If this takes too long, try refreshing</p>
           <button 
             onClick={() => window.location.reload()}
@@ -161,6 +179,19 @@ export default function DashboardPage() {
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black mx-auto"></div>
             <p className="mt-2 text-gray-600">Setting up your profile...</p>
+            <p className="text-xs text-gray-500 mt-2">This may take a moment after making changes</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            >
+              Refresh Page
+            </button>
+            <button 
+              onClick={() => window.location.href = '/profile'}
+              className="mt-2 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 block w-full"
+            >
+              Go to Profile
+            </button>
           </div>
         )}
       </div>
