@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function DashboardPage() {
-  const { user, loading, userRecord } = useAuth();
+  const { user, loading, userRecord, refreshUserRecord } = useAuth();
   const { refreshTrigger } = useData();
   const router = useRouter();
   const [showSignIn, setShowSignIn] = useState(false);
@@ -40,6 +40,12 @@ export default function DashboardPage() {
   useEffect(() => {
     const createUserRecord = async () => {
       if (!loading && user && !userRecord) {
+        // Add timeout protection for user record creation
+        const timeoutId = setTimeout(() => {
+          console.log("User record creation timeout - forcing refresh");
+          window.location.reload();
+        }, 15000); // 15 second timeout
+        
         try {
           console.log("Attempting to create user record for:", user.email);
           
@@ -91,10 +97,14 @@ export default function DashboardPage() {
           } else {
             console.log("User record created successfully:", data);
             setUserRecordError(null);
+            // Refresh the user record in the auth context
+            await refreshUserRecord();
           }
         } catch (error) {
           console.error("Unexpected error creating user record:", error);
           setUserRecordError("An unexpected error occurred. Please contact support.");
+        } finally {
+          clearTimeout(timeoutId);
         }
       }
     };

@@ -14,6 +14,7 @@ type AuthContextType = {
   loading: boolean;
   userRecord: any | null;
   signOut: () => Promise<void>;
+  refreshUserRecord: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -183,6 +184,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   console.log("AuthProvider: About to return, loading =", loading);
 
+  const refreshUserRecord = async () => {
+    if (!user) return;
+    console.log("Auth context: Refreshing user record for:", user.id);
+    try {
+      const record = await checkUserRecord(user);
+      console.log("Auth context: Refreshed user record:", { hasRecord: !!record, recordId: record?.id });
+      setUserRecord(record);
+    } catch (error) {
+      console.error("Auth context: Error refreshing user record:", error);
+      setUserRecord(null);
+    }
+  };
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -198,7 +212,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log("Auth context: Sign out successful");
           setUserRecord(null);
         }
-      }
+      },
+      refreshUserRecord
     }}>
       {children}
     </AuthContext.Provider>
