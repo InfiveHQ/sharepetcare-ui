@@ -16,15 +16,7 @@ export default function Home() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black mx-auto"></div>
           <p className="mt-2 text-gray-600">Loading...</p>
-          <button 
-            onClick={async () => {
-              const { data: { user } } = await supabase.auth.getUser();
-              console.log("Manual user check:", user);
-            }}
-            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded"
-          >
-            Check User Manually
-          </button>
+          <p className="text-xs text-gray-500 mt-2">Please wait while we set up your account</p>
         </div>
       </div>
     );

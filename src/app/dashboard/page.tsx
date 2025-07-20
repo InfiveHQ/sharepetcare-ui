@@ -130,7 +130,7 @@ export default function DashboardPage() {
       const timeoutId = setTimeout(() => {
         console.log("Dashboard: Loading timeout triggered");
         setLoadingTimeout(true);
-      }, 10000); // 10 second timeout
+      }, 8000); // 8 second timeout
       
       return () => clearTimeout(timeoutId);
     } else {
@@ -180,6 +180,9 @@ export default function DashboardPage() {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black mx-auto"></div>
             <p className="mt-2 text-gray-600">Setting up your profile...</p>
             <p className="text-xs text-gray-500 mt-2">This may take a moment after making changes</p>
+            {loadingTimeout && (
+              <p className="text-xs text-orange-600 mt-1">Taking longer than expected</p>
+            )}
             <button 
               onClick={() => window.location.reload()}
               className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
@@ -191,6 +194,12 @@ export default function DashboardPage() {
               className="mt-2 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 block w-full"
             >
               Go to Profile
+            </button>
+            <button 
+              onClick={() => window.location.href = '/?force=1'}
+              className="mt-2 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 block w-full"
+            >
+              Force Reload
             </button>
           </div>
         )}
