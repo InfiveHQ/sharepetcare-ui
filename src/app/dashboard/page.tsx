@@ -100,6 +100,7 @@ export default function DashboardPage() {
     };
   }, [user, loading]);
 
+  // Show loading state with timeout protection
   if (loading) {
     return (
       <div className="p-8">
@@ -122,7 +123,18 @@ export default function DashboardPage() {
   }
 
   if (!userRecord && user && !loading) {
-    return <div className="p-8">{userRecordError ? <div className="text-red-600">{userRecordError}</div> : "Setting up your profile..."}</div>;
+    return (
+      <div className="p-8">
+        {userRecordError ? (
+          <div className="text-red-600">{userRecordError}</div>
+        ) : (
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black mx-auto"></div>
+            <p className="mt-2 text-gray-600">Setting up your profile...</p>
+          </div>
+        )}
+      </div>
+    );
   }
 
   console.log("Dashboard render:", {

@@ -19,34 +19,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [userRecord, setUserRecord] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [userRecordLoading, setUserRecordLoading] = useState(false);
 
   const checkUserRecord = async (authUser: User) => {
-    if (!authUser) return null;
+    if (!authUser || userRecordLoading) return null;
+    
+    setUserRecordLoading(true);
     try {
       const { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('id', authUser.id)
         .single();
-      if (error) return null;
+      
+      if (error && error.code !== 'PGRST116') {
+        console.error("Error checking user record:", error);
+        return null;
+      }
       return data;
     } catch (error) {
+      console.error("Unexpected error checking user record:", error);
       return null;
+    } finally {
+      setUserRecordLoading(false);
     }
   };
 
   useEffect(() => {
     let mounted = true;
     setLoading(true);
+    
     const getInitialAuth = async () => {
       try {
         // Get initial session and user
         const { data: { session } } = await supabase.auth.getSession();
         const { data: { user } } = await supabase.auth.getUser();
         const currentUser = session?.user || user;
+        
         if (mounted) {
           setSession(session);
           setUser(currentUser);
+          
           if (currentUser) {
             const record = await checkUserRecord(currentUser);
             if (mounted) setUserRecord(record);
@@ -56,22 +69,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setLoading(false);
         }
       } catch (error) {
-        if (mounted) setLoading(false);
+        console.error("Error getting initial auth:", error);
+        if (mounted) {
+          setLoading(false);
+          setUserRecord(null);
+        }
       }
     };
+    
     getInitialAuth();
 
     // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
+      
+      console.log("Auth state change:", event, session?.user?.id);
+      
       setSession(session);
       setUser(session?.user ?? null);
+      
       if (session?.user) {
         const record = await checkUserRecord(session.user);
         if (mounted) setUserRecord(record);
       } else {
         setUserRecord(null);
       }
+      
       setLoading(false);
     });
 
