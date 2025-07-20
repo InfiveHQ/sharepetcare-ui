@@ -269,9 +269,20 @@ export default function DailyTaskChecklist() {
   };
 
   const handleQuickComplete = async (task: DailyTask) => {
-    if (!user) return;
+    console.log("handleQuickComplete called for task:", task);
+    if (!user) {
+      console.log("No user, returning");
+      return;
+    }
 
     try {
+      console.log("Inserting task log with data:", {
+        task_id: task.task_id,
+        pet_id: task.pet_id,
+        user_id: user.id,
+        date_time: new Date().toISOString()
+      });
+
       const { error } = await supabase
         .from("task_logs")
         .insert([{
@@ -284,7 +295,9 @@ export default function DailyTaskChecklist() {
 
       if (error) {
         console.error("Failed to quick complete task:", error);
+        alert(`Failed to complete task: ${error.message}`);
       } else {
+        console.log("Task completed successfully, updating local state");
         // Update local state
         setDailyTasks(prev => prev.map(t => 
           t.id === task.id
@@ -302,6 +315,7 @@ export default function DailyTaskChecklist() {
       }
     } catch (error) {
       console.error("Error quick completing task:", error);
+      alert(`Error completing task: ${error}`);
     }
   };
 
@@ -537,7 +551,11 @@ export default function DailyTaskChecklist() {
                                           Click to complete
                                         </span>
                                         <button
-                                          onClick={e => { e.stopPropagation(); handleQuickComplete(task); }}
+                                          onClick={e => { 
+                                            console.log("Lightning bolt clicked for task:", task);
+                                            e.stopPropagation(); 
+                                            handleQuickComplete(task); 
+                                          }}
                                           className="text-gray-400 hover:text-green-600 transition-colors text-lg"
                                           title="Quick complete"
                                           type="button"
@@ -627,6 +645,7 @@ export default function DailyTaskChecklist() {
                                 </span>
                                 <button
                                   onClick={(e) => {
+                                    console.log("Mobile lightning bolt clicked for task:", task);
                                     e.stopPropagation();
                                     handleQuickComplete(task);
                                   }}
