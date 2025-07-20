@@ -28,6 +28,26 @@ export default function DashboardPage() {
     const createUserRecord = async () => {
       if (!loading && user && !userRecord) {
         try {
+          console.log("Attempting to create user record for:", user.email);
+          
+          // First, check if user record already exists
+          const { data: existingUser, error: checkError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', user.id)
+            .single();
+          
+          if (existingUser) {
+            console.log("User record already exists:", existingUser);
+            setUserRecordError(null);
+            return;
+          }
+          
+          if (checkError && checkError.code !== 'PGRST116') {
+            console.error("Error checking existing user:", checkError);
+          }
+          
+          // Try to create the user record
           const { data, error } = await supabase
             .from('users')
             .insert([{
@@ -37,15 +57,31 @@ export default function DashboardPage() {
             }])
             .select()
             .single();
-          if (error && (error.message || error.code)) {
-            console.error("Failed to create user record:", error);
-            setUserRecordError("Failed to create user record. Please contact support.");
+            
+          if (error) {
+            console.error("Failed to create user record:", {
+              message: error.message,
+              code: error.code,
+              details: error.details,
+              hint: error.hint,
+              fullError: error
+            });
+            
+            // Provide more specific error messages
+            if (error.code === '42501') {
+              setUserRecordError("Permission denied. Please contact support to set up your account.");
+            } else if (error.code === '23505') {
+              setUserRecordError("User record already exists. Please refresh the page.");
+            } else {
+              setUserRecordError(`Failed to create user record: ${error.message || 'Unknown error'}. Please contact support.`);
+            }
           } else {
+            console.log("User record created successfully:", data);
             setUserRecordError(null);
           }
         } catch (error) {
-          console.error("Error creating user record:", error);
-          setUserRecordError("Failed to create user record. Please contact support.");
+          console.error("Unexpected error creating user record:", error);
+          setUserRecordError("An unexpected error occurred. Please contact support.");
         }
       }
     };
@@ -100,10 +136,20 @@ export default function DashboardPage() {
         {/* Remove navigation tabs above the card */}
         <div className="bg-white rounded-xl p-4 sm:p-8 shadow-lg">
           <div className="flex justify-between items-center mb-6">
-            <h1 className="text-xl sm:text-2xl font-bold">Dashboard</h1>
+            <div className="text-center flex-1">
+              <h1 className="text-2xl sm:text-3xl font-black">Today's Tasks</h1>
+              <p className="text-base text-gray-600 mt-1">
+                {new Date().toLocaleDateString('en-US', { 
+                  weekday: 'long', 
+                  year: 'numeric', 
+                  month: 'long', 
+                  day: 'numeric' 
+                })}
+              </p>
+            </div>
             <a
               href="/profile"
-              className="bg-black text-white px-4 py-2 rounded-lg font-semibold shadow hover:bg-gray-800 transition-colors"
+              className="bg-white text-black px-4 py-2 rounded-lg font-semibold shadow border border-gray-300 hover:bg-gray-50 transition-colors"
             >
               Profile
             </a>
@@ -111,7 +157,6 @@ export default function DashboardPage() {
           
           <div className="mt-8 space-y-6">
             <DailyTaskChecklist />
-            <DailyLog />
             <PetCareModal />
           </div>
         </div>

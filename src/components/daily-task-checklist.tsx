@@ -47,7 +47,7 @@ export default function DailyTaskChecklist() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalData, setModalData] = useState<CompletionModalData | null>(null);
   const [userName, setUserName] = useState<string>("");
-  const [view, setView] = useState<'pet' | 'activity'>('pet');
+  const [view, setView] = useState<'pet' | 'activity' | 'log'>('pet');
 
   // Load today's task completion status
   useEffect(() => {
@@ -386,6 +386,45 @@ export default function DailyTaskChecklist() {
     );
   }
 
+  const logsByPet: { [petName: string]: DailyTask[] } = {};
+  (dailyTasks.filter(task => task.completed && task.completed_at)).forEach(task => {
+    if (!logsByPet[task.pet_name]) logsByPet[task.pet_name] = [];
+    logsByPet[task.pet_name].push(task);
+  });
+  const petNames = Object.keys(logsByPet);
+  const todaysLogSection = (
+    <div className="bg-gray-50 py-6 px-2">
+      <div className="font-bold text-lg mb-4">Today's Log</div>
+      {petNames.length === 0 ? (
+        <div className="text-gray-400 text-sm">No tasks completed today.</div>
+      ) : (
+        <div>
+          {petNames.map((petName) => (
+            <div key={petName} className="bg-white shadow rounded-xl p-4 mb-6">
+              <div className="font-bold text-lg text-gray-800 mb-2">{petName}</div>
+              <ul>
+                {logsByPet[petName].map((log, idx, arr) => (
+                  <li key={log.id + '-' + idx} className={idx < arr.length - 1 ? 'border-b border-gray-100' : ''}>
+                    <div className="flex items-center py-1">
+                      <span className="text-xs text-gray-400 w-12 flex-shrink-0">{log.completed_at ? new Date(log.completed_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</span>
+                      <span className="font-medium text-sm text-gray-700 flex-1 ml-2 truncate">{log.name}</span>
+                      <span className="text-xs text-gray-400 ml-2 text-right flex-shrink-0">{log.completed_by}</span>
+                    </div>
+                    {log.notes && (
+                      <div className="ml-14 text-xs text-gray-600 italic mt-0.5 mb-1 whitespace-normal break-words">
+                        &quot;{log.notes}&quot;
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       {/* Toggle for view */}
@@ -401,6 +440,12 @@ export default function DailyTaskChecklist() {
           onClick={() => setView('activity')}
         >
           By Activity
+        </button>
+        <button
+          className={`px-4 py-2 rounded-lg font-semibold shadow ${view === 'log' ? 'bg-black text-white' : 'bg-gray-200 text-gray-800'}`}
+          onClick={() => setView('log')}
+        >
+          Today's Log
         </button>
       </div>
       {/* By Activity View */}
@@ -514,88 +559,66 @@ export default function DailyTaskChecklist() {
               ));
             })()}
           </div>
-          {/* Mobile-friendly cards */}
-          <div className="md:hidden space-y-4">
+          {/* Mobile-friendly cards - harmonized with By Pet style */}
+          <div className="md:hidden space-y-4 bg-gray-50 py-6 px-2">
             {activities.map(({ activity, tasks }) => (
-              <div key={activity} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 font-semibold">{activity}</div>
-                <div className="divide-y divide-gray-200">
-                  {petList.map(pet => {
+              <div key={activity} className="bg-white shadow rounded-xl p-4 mb-6">
+                <div className="font-bold text-lg text-gray-800 mb-2">{activity}</div>
+                <ul>
+                  {petList.map((pet, idx, arr) => {
                     const task = tasks.find(t => t.pet_id === pet.id);
                     if (!task) return null;
+                    const isCompleted = task.completed;
                     return (
-                      <div key={pet.id} className="flex items-center justify-between p-4">
-                        <div className="flex flex-col flex-1">
-                          <span className="font-medium text-gray-900">{pet.name}</span>
-                          {task.completed ? (
-                            <span className="strikethrough-group">
-                              <span className="font-medium text-sm text-gray-400">
-                                {task.expected_time ? task.expected_time.substring(0, 5) : ''}
+                      <li key={pet.id} className={idx < arr.length - 1 ? 'border-b border-gray-100' : ''}>
+                        <div className="flex items-center py-1">
+                          {/* Completed */}
+                          {isCompleted ? (
+                            <>
+                              <span className="text-green-600 text-xl mr-2">✓</span>
+                              <span className="font-medium text-sm text-gray-400 line-through flex-1 ml-2 truncate">{pet.name}</span>
+                              <span className="text-xs text-gray-400 ml-2 text-right flex-shrink-0">
+                                {task.completed_by} @ {task.completed_at ? new Date(task.completed_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
                               </span>
-                              {task.assigned_user_name && (
-                                <span className="text-xs text-gray-500 ml-1">({task.assigned_user_name})</span>
-                              )}
-                            </span>
+                            </>
                           ) : (
                             <>
-                              <span className="font-medium text-sm text-black">
-                                {task.expected_time ? task.expected_time.substring(0, 5) : ''}
+                              <span className="text-red-600 text-xl mr-2">○</span>
+                              <span className="font-medium text-sm text-gray-700 flex-1 ml-2 truncate">{pet.name}</span>
+                              <span className="text-xs text-gray-400 ml-2 text-right flex-shrink-0">
+                                {task.assigned_user_name} • {task.expected_time ? task.expected_time.substring(0, 5) : ''}
                               </span>
-                              {task.assigned_user_name && (
-                                <span className="text-xs text-gray-500 ml-1">({task.assigned_user_name})</span>
-                              )}
+                              <button
+                                className="text-blue-600 font-medium rounded px-2 py-1 text-xs active:bg-blue-100 ml-2"
+                                onClick={() => handleTaskClick(task)}
+                              >
+                                Click to complete
+                              </button>
+                              <button
+                                onClick={e => { e.stopPropagation(); handleQuickComplete(task); }}
+                                className="text-gray-400 hover:text-green-600 text-xl ml-1"
+                                title="Quick complete"
+                                type="button"
+                              >
+                                ⚡
+                              </button>
                             </>
                           )}
-                          {task.instructions && (
-                            <button
-                              className="text-xs text-gray-400 hover:text-gray-600 underline text-left"
-                              onClick={e => { e.stopPropagation(); alert(task.instructions); }}
-                              title={task.instructions}
-                            >
-                              (Instructions)
-                            </button>
-                          )}
                         </div>
-                        {task.completed ? (
-                          <div
-                            role="button"
-                            tabIndex={0}
-                            className="flex flex-col items-end flex-1 cursor-pointer w-full text-left outline-none focus:ring-2 focus:ring-blue-400"
-                            onClick={() => handleTaskClick(task)}
-                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleTaskClick(task); }}
-                            style={{ minHeight: '48px' }}
-                          >
-                            <span className="text-green-600 text-lg">✓</span>
-                            <span className="text-xs text-gray-400">
-                              {task.completed_by} @ {task.completed_at ? new Date(task.completed_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 flex-1 justify-end">
-                            <span
-                              className="text-blue-600 text-sm font-medium cursor-pointer"
-                              onClick={() => handleTaskClick(task)}
-                            >
-                              Click to complete
-                            </span>
-                            <button
-                              onClick={e => { e.stopPropagation(); handleQuickComplete(task); }}
-                              className="text-gray-400 hover:text-green-600 transition-colors text-lg"
-                              title="Quick complete"
-                              type="button"
-                            >
-                              ⚡
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                      </li>
                     );
                   })}
-                </div>
+                </ul>
               </div>
             ))}
           </div>
         </>
+      )}
+      {/* Today's Log View */}
+      {view === "log" && (
+        <div className="mt-4">
+          {todaysLogSection}
+        </div>
       )}
       {/* By Pet View */}
       {view === "pet" && (

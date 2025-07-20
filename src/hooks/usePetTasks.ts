@@ -73,6 +73,40 @@ export function usePetTasks() {
 
     console.log("Fetching pet tasks for user:", user.id);
     
+    // First, get the pets the user has access to (owned or shared)
+    const { data: ownedPets, error: ownedError } = await supabase
+      .from('pets')
+      .select('id')
+      .eq('owner_id', user.id);
+      
+    console.log("Owned pets query result:", { ownedPets, ownedError });
+    
+    // Get shared pets using email
+    const { data: sharedPets, error: sharedError } = await supabase
+      .from('pet_shares')
+      .select('pet_id')
+      .eq('shared_with_email', user.email);
+      
+    console.log("Shared pets query result:", { sharedPets, sharedError });
+    
+    let accessiblePetIds: string[] = [];
+    if (ownedPets) {
+      accessiblePetIds = [...accessiblePetIds, ...ownedPets.map(pet => pet.id)];
+    }
+    if (sharedPets) {
+      accessiblePetIds = [...accessiblePetIds, ...sharedPets.map(share => share.pet_id)];
+    }
+    
+    console.log("Accessible pet IDs:", accessiblePetIds);
+    
+    if (accessiblePetIds.length === 0) {
+      console.log("No accessible pets found, setting empty pet tasks");
+      setPetTasks([]);
+      setLoading(false);
+      return;
+    }
+    
+    // Now fetch pet tasks only for accessible pets
     const { data, error } = await supabase
       .from("pet_tasks")
       .select(`
@@ -87,6 +121,7 @@ export function usePetTasks() {
         frequency,
         instructions
       `)
+      .in('pet_id', accessiblePetIds)
       .order("expected_time");
 
     if (error) {
