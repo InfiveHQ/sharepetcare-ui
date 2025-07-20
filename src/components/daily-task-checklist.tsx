@@ -774,7 +774,7 @@ export default function DailyTaskChecklist() {
         <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 bg-black/30 z-40" />
-            <Dialog.Content className="fixed bottom-0 left-0 right-0 bg-white p-6 rounded-t-2xl z-50 max-h-[80vh] overflow-y-auto">
+            <Dialog.Content className="fixed bottom-0 left-0 right-0 bg-white p-6 rounded-t-2xl z-50 max-h-[80vh] overflow-y-auto pb-8 sm:pb-6">
               <Dialog.Title className="text-lg font-bold mb-4">
                 {modalData && dailyTasks.find(task => task.id === modalData.petTaskId)?.completed 
                   ? "Edit Task Completion" 
@@ -845,7 +845,7 @@ export default function DailyTaskChecklist() {
                     />
                   </div>
 
-                  <div className="flex gap-3 pt-4">
+                  <div className="flex gap-3 pt-4 pb-2">
                     <button
                       onClick={() => setModalOpen(false)}
                       className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
