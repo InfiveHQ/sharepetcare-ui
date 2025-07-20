@@ -30,6 +30,7 @@ export default function PetTaskAssignment({ pets, tasks }: PetTaskAssignmentProp
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [userName, setUserName] = useState<string>("");
   const [availableUsers, setAvailableUsers] = useState<{ [petId: string]: { id: string; name: string; email: string }[] }>({});
+  const [userPermissions, setUserPermissions] = useState<{ [petId: string]: boolean }>({});
   const cleanupTimeout = useRef<NodeJS.Timeout | null>(null);
 
   // Load user's name from database
@@ -54,16 +55,22 @@ export default function PetTaskAssignment({ pets, tasks }: PetTaskAssignmentProp
     loadUserName();
   }, [user]);
 
-  // Load available users for pet task assignment
+  // Load available users for pet task assignment and check permissions
   useEffect(() => {
     const loadAvailableUsers = async () => {
-      if (!pets.length) return;
+      if (!pets.length || !user) return;
 
       try {
         const usersByPet: { [petId: string]: { id: string; name: string; email: string }[] } = {};
+        const permissions: { [petId: string]: boolean } = {};
         
         for (const pet of pets) {
           const petUsers: { id: string; name: string; email: string }[] = [];
+          
+          // Check if current user owns this pet
+          const isOwner = pet.owner_id === user.id;
+          permissions[pet.id] = isOwner;
+          
           // 1. Get the pet owner
           const { data: petData } = await supabase
             .from('pets')
@@ -107,13 +114,16 @@ export default function PetTaskAssignment({ pets, tasks }: PetTaskAssignmentProp
           }
           usersByPet[pet.id] = petUsers;
         }
+        
         setAvailableUsers(usersByPet);
+        setUserPermissions(permissions);
+        console.log("PetTaskAssignment: User permissions:", permissions);
       } catch (error) {
         console.error("Error loading available users:", error);
       }
     };
     loadAvailableUsers();
-  }, [pets]);
+  }, [pets, user]);
 
   // Initialize assignments matrix
   useEffect(() => {
@@ -218,6 +228,13 @@ export default function PetTaskAssignment({ pets, tasks }: PetTaskAssignmentProp
   const handleCheckboxChange = async (petId: string, taskId: string, checked: boolean) => {
     if (!user) return;
 
+    // Check if user has permission to modify this pet's tasks
+    if (!canModifyPetTask(petId)) {
+      setMessage({ type: 'error', text: "You don't have permission to modify this pet's tasks. Only the pet owner can make changes." });
+      setTimeout(() => setMessage(null), 3000);
+      return;
+    }
+
     const assignmentIndex = assignments.findIndex(
       a => a.pet_id === petId && a.task_id === taskId
     );
@@ -287,12 +304,22 @@ export default function PetTaskAssignment({ pets, tasks }: PetTaskAssignmentProp
   };
 
   const handleFieldChange = async (petId: string, taskId: string, field: string, value: string) => {
+    // Check if user has permission to modify this pet's tasks
+    if (!canModifyPetTask(petId)) {
+      setMessage({ type: 'error', text: "You don't have permission to modify this pet's tasks. Only the pet owner can make changes." });
+      setTimeout(() => setMessage(null), 3000);
+      return;
+    }
+
     const assignmentIndex = assignments.findIndex(
       a => a.pet_id === petId && a.task_id === taskId
     );
 
     if (assignmentIndex === -1) return;
 
+    // Store original value in case we need to revert
+    const originalValue = assignments[assignmentIndex][field as keyof PetTaskAssignment];
+    
     const updatedAssignments = [...assignments];
     updatedAssignments[assignmentIndex] = {
       ...updatedAssignments[assignmentIndex],
@@ -310,8 +337,35 @@ export default function PetTaskAssignment({ pets, tasks }: PetTaskAssignmentProp
 
     if (error) {
       console.error("Failed to update field:", error);
-      setMessage({ type: 'error', text: `Failed to update: ${error.message}` });
+      console.error("Error details:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      });
+      
+      // Revert the change in UI
+      updatedAssignments[assignmentIndex] = {
+        ...updatedAssignments[assignmentIndex],
+        [field]: originalValue
+      };
+      setAssignments([...updatedAssignments]);
+      
+      // Show specific error message based on error type
+      let errorMessage = `Failed to update: ${error.message}`;
+      if (error.code === '42501') {
+        errorMessage = "You don't have permission to modify this pet's tasks. Only the pet owner can make changes.";
+      } else if (error.code === '23503') {
+        errorMessage = "Cannot update task assignment. The pet or task may have been deleted.";
+      }
+      
+      setMessage({ type: 'error', text: errorMessage });
+    } else {
+      setMessage({ type: 'success', text: 'Updated successfully!' });
+      refreshPetTasks();
     }
+    
+    setTimeout(() => setMessage(null), 3000);
   };
 
   const getPetName = (petId: string) => {
@@ -357,6 +411,11 @@ export default function PetTaskAssignment({ pets, tasks }: PetTaskAssignmentProp
 
     console.log("PetTaskAssignment: Grouped assignments", grouped);
     return grouped;
+  };
+
+  // Helper function to check if user can modify a pet task
+  const canModifyPetTask = (petId: string) => {
+    return userPermissions[petId] || false;
   };
 
   if (tasks.length === 0 || pets.length === 0) {
