@@ -30,7 +30,7 @@ export default function PetTaskAssignment({ pets, tasks }: PetTaskAssignmentProp
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [userName, setUserName] = useState<string>("");
   const [availableUsers, setAvailableUsers] = useState<{ [petId: string]: { id: string; name: string; email: string }[] }>({});
-  const [userPermissions, setUserPermissions] = useState<{ [petId: string]: boolean }>({});
+  const [userPermissions, setUserPermissions] = useState<{ [petId: string]: 'owner' | 'view_only' | 'view_and_log' | 'full_access' | null }>({});
   const cleanupTimeout = useRef<NodeJS.Timeout | null>(null);
 
   // Load user's name from database
@@ -62,14 +62,26 @@ export default function PetTaskAssignment({ pets, tasks }: PetTaskAssignmentProp
 
       try {
         const usersByPet: { [petId: string]: { id: string; name: string; email: string }[] } = {};
-        const permissions: { [petId: string]: boolean } = {};
+        const permissions: { [petId: string]: 'owner' | 'view_only' | 'view_and_log' | 'full_access' | null } = {};
         
         for (const pet of pets) {
           const petUsers: { id: string; name: string; email: string }[] = [];
           
           // Check if current user owns this pet
           const isOwner = pet.owner_id === user.id;
-          permissions[pet.id] = isOwner;
+          if (isOwner) {
+            permissions[pet.id] = 'owner';
+          } else {
+            // Check sharing permissions for this user
+            const { data: shareData } = await supabase
+              .from('pet_shares')
+              .select('permission')
+              .eq('pet_id', pet.id)
+              .eq('shared_with_email', user.email)
+              .single();
+            
+            permissions[pet.id] = shareData?.permission || null;
+          }
           
           // 1. Get the pet owner
           const { data: petData } = await supabase
@@ -228,9 +240,16 @@ export default function PetTaskAssignment({ pets, tasks }: PetTaskAssignmentProp
   const handleCheckboxChange = async (petId: string, taskId: string, checked: boolean) => {
     if (!user) return;
 
-    // Check if user has permission to modify this pet's tasks
-    if (!canModifyPetTask(petId)) {
-      setMessage({ type: 'error', text: "You don't have permission to modify this pet's tasks. Only the pet owner can make changes." });
+    // Check if user has permission to assign tasks
+    if (!canAssignToSelf(petId)) {
+      const permission = userPermissions[petId];
+      if (permission === 'view_only') {
+        setMessage({ type: 'error', text: "You have view-only access to this pet. You cannot assign tasks." });
+      } else if (!permission) {
+        setMessage({ type: 'error', text: "You don't have permission to assign tasks for this pet." });
+      } else {
+        setMessage({ type: 'error', text: "You don't have permission to assign tasks for this pet." });
+      }
       setTimeout(() => setMessage(null), 3000);
       return;
     }
@@ -306,7 +325,14 @@ export default function PetTaskAssignment({ pets, tasks }: PetTaskAssignmentProp
   const handleFieldChange = async (petId: string, taskId: string, field: string, value: string) => {
     // Check if user has permission to modify this pet's tasks
     if (!canModifyPetTask(petId)) {
-      setMessage({ type: 'error', text: "You don't have permission to modify this pet's tasks. Only the pet owner can make changes." });
+      const permission = userPermissions[petId];
+      if (permission === 'view_only' || permission === 'view_and_log') {
+        setMessage({ type: 'error', text: "You don't have permission to modify task details. Only the pet owner or users with full access can change time and instructions." });
+      } else if (!permission) {
+        setMessage({ type: 'error', text: "You don't have permission to modify task details for this pet." });
+      } else {
+        setMessage({ type: 'error', text: "You don't have permission to modify task details for this pet." });
+      }
       setTimeout(() => setMessage(null), 3000);
       return;
     }
@@ -415,7 +441,14 @@ export default function PetTaskAssignment({ pets, tasks }: PetTaskAssignmentProp
 
   // Helper function to check if user can modify a pet task
   const canModifyPetTask = (petId: string) => {
-    return userPermissions[petId] || false;
+    const permission = userPermissions[petId];
+    return permission === 'owner' || permission === 'full_access';
+  };
+
+  // Helper function to check if user can assign tasks to themselves
+  const canAssignToSelf = (petId: string) => {
+    const permission = userPermissions[petId];
+    return permission === 'owner' || permission === 'full_access' || permission === 'view_and_log';
   };
 
   if (tasks.length === 0 || pets.length === 0) {

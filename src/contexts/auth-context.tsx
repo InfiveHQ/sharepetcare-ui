@@ -35,11 +35,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     setUserRecordLoading(true);
     try {
-      const { data, error } = await supabase
+      // Add timeout protection
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('User record check timed out')), 5000);
+      });
+      
+      const checkPromise = supabase
         .from('users')
         .select('*')
         .eq('id', authUser.id)
         .single();
+      
+      const { data, error } = await Promise.race([checkPromise, timeoutPromise]);
       
       if (error && error.code !== 'PGRST116') {
         console.error("Error checking user record:", error);
@@ -58,6 +65,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log("AuthProvider: Main useEffect started");
     let mounted = true;
     setLoading(true);
+    
+    // Add timeout protection for the entire auth process
+    const timeoutId = setTimeout(() => {
+      if (mounted) {
+        console.log("Auth context: Main timeout triggered - forcing loading to false");
+        setLoading(false);
+        setUserRecord(null);
+      }
+    }, 8000); // 8 second timeout
     
     const getInitialAuth = async () => {
       try {
@@ -133,6 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       mounted = false;
+      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);
