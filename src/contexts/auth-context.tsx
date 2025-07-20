@@ -74,24 +74,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
       
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        const record = await checkUserRecord(session.user);
-        if (mounted) setUserRecord(record);
-      } else {
-        if (mounted) setUserRecord(null);
+      // Only update if the session actually changed
+      if (session?.user?.id !== user?.id) {
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          const record = await checkUserRecord(session.user);
+          if (mounted) setUserRecord(record);
+        } else {
+          if (mounted) setUserRecord(null);
+        }
+        
+        setLoading(false);
       }
-      
-      setLoading(false);
     });
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [user?.id]);
 
   const refreshUserRecord = async () => {
     if (!user) return;

@@ -40,6 +40,8 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [hasProfileChanges, setHasProfileChanges] = useState(false);
+  const [hasPetTaskChanges, setHasPetTaskChanges] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
   
   // Pet task management state
@@ -199,10 +201,8 @@ export default function ProfilePage() {
         console.log("Verification query result:", { verifyData, verifyError });
         
         setMessage({ type: 'success', text: 'Profile updated successfully!' });
-        // Trigger global refresh immediately
-        triggerRefresh();
-        // Dispatch custom event for pet task assignment component
-        window.dispatchEvent(new Event('dataRefreshed'));
+        setHasProfileChanges(true);
+        setHasUnsavedChanges(true);
       }
     } catch (error) {
       console.error("Unexpected error:", error);
@@ -212,29 +212,22 @@ export default function ProfilePage() {
     }
   };
 
-  const handleSaveChanges = async () => {
+  const handleSavePetTaskChanges = async () => {
     setLoading(true);
     setMessage(null);
     
-    console.log("=== SAVE CHANGES STARTED ===");
+    console.log("=== SAVE PET/TASK CHANGES STARTED ===");
     console.log("Current pets:", pets);
     console.log("Current tasks:", tasks);
     
     try {
-      // Trigger global refresh to update dashboard
-      console.log("Triggering global refresh...");
-      triggerRefresh();
-      
       // Dispatch custom event for pet task assignment component
       console.log("Dispatching dataRefreshed event...");
       window.dispatchEvent(new Event('dataRefreshed'));
       
-      // Dispatch event to refresh dashboard
-      console.log("Dispatching dashboard refresh event...");
-      window.dispatchEvent(new Event('dashboardRefresh'));
-      
-      console.log("=== SAVE CHANGES COMPLETED ===");
-      setMessage({ type: 'success', text: 'Changes saved successfully! Redirecting to dashboard...' });
+      console.log("=== SAVE PET/TASK CHANGES COMPLETED ===");
+      setMessage({ type: 'success', text: 'Pet and task changes saved successfully! Redirecting to dashboard...' });
+      setHasPetTaskChanges(false);
       setHasUnsavedChanges(false);
       
       // Navigate back to dashboard after a short delay
@@ -242,8 +235,37 @@ export default function ProfilePage() {
         window.location.href = '/';
       }, 1500);
     } catch (error) {
-      console.error("Failed to save changes:", error);
-      setMessage({ type: 'error', text: 'Failed to save changes' });
+      console.error("Failed to save pet/task changes:", error);
+      setMessage({ type: 'error', text: 'Failed to save pet/task changes' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveProfileChanges = async () => {
+    setLoading(true);
+    setMessage(null);
+    
+    console.log("=== SAVE PROFILE CHANGES STARTED ===");
+    console.log("New name:", name);
+    
+    try {
+      // Trigger auth context refresh for profile changes
+      console.log("Triggering auth refresh for profile changes...");
+      triggerRefresh();
+      
+      console.log("=== SAVE PROFILE CHANGES COMPLETED ===");
+      setMessage({ type: 'success', text: 'Profile updated successfully! Redirecting to dashboard...' });
+      setHasProfileChanges(false);
+      setHasUnsavedChanges(false);
+      
+      // Navigate back to dashboard after a short delay
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 1500);
+    } catch (error) {
+      console.error("Failed to save profile changes:", error);
+      setMessage({ type: 'error', text: 'Failed to save profile changes' });
     } finally {
       setLoading(false);
     }
@@ -266,6 +288,7 @@ export default function ProfilePage() {
         ));
         setMessage({ type: 'success', text: 'Pet updated successfully!' });
         console.log("Setting hasUnsavedChanges to true after pet update");
+        setHasPetTaskChanges(true);
         setHasUnsavedChanges(true);
       }
     } catch (error) {
@@ -292,6 +315,7 @@ export default function ProfilePage() {
         setPets([...pets, ...(data || [])]);
         setMessage({ type: 'success', text: 'Pet added successfully!' });
         console.log("Setting hasUnsavedChanges to true after adding pet");
+        setHasPetTaskChanges(true);
         setHasUnsavedChanges(true);
       }
     } catch (error) {
@@ -317,6 +341,7 @@ export default function ProfilePage() {
         ));
         setMessage({ type: 'success', text: 'Task updated successfully!' });
         console.log("Setting hasUnsavedChanges to true after updating task");
+        setHasPetTaskChanges(true);
         setHasUnsavedChanges(true);
       }
     } catch (error) {
@@ -351,6 +376,7 @@ export default function ProfilePage() {
         setTasks([...tasks, ...(data || [])]);
         setMessage({ type: 'success', text: 'Task added successfully!' });
         console.log("Setting hasUnsavedChanges to true after adding task");
+        setHasPetTaskChanges(true);
         setHasUnsavedChanges(true);
       }
     } catch (error) {
@@ -493,6 +519,7 @@ export default function ProfilePage() {
         setTasks(tasks.filter(task => task.id !== taskId));
         setMessage({ type: 'success', text: 'Task deleted successfully!' });
         console.log("Setting hasUnsavedChanges to true after deleting task");
+        setHasPetTaskChanges(true);
         setHasUnsavedChanges(true);
       }
     } catch (error) {
@@ -535,6 +562,7 @@ export default function ProfilePage() {
       } else {
         setTasks(updatedTasks);
         setMessage({ type: 'success', text: 'Task order updated successfully!' });
+        setHasPetTaskChanges(true);
         setHasUnsavedChanges(true);
       }
     } catch (error) {
@@ -578,6 +606,7 @@ export default function ProfilePage() {
       } else {
         setTasks(updatedTasks);
         setMessage({ type: 'success', text: 'Task order updated successfully!' });
+        setHasPetTaskChanges(true);
         setHasUnsavedChanges(true);
       }
     } catch (error) {
@@ -622,6 +651,7 @@ export default function ProfilePage() {
         setPets(pets.filter(pet => pet.id !== petId));
         setMessage({ type: 'success', text: 'Pet deleted successfully!' });
         console.log("Setting hasUnsavedChanges to true after deleting pet");
+        setHasPetTaskChanges(true);
         setHasUnsavedChanges(true);
       }
     } catch (error) {
@@ -866,13 +896,13 @@ export default function ProfilePage() {
 
           <div className="mt-6 pt-6 border-t">
             <Button
-              onClick={handleSaveChanges}
+              onClick={hasProfileChanges ? handleSaveProfileChanges : handleSavePetTaskChanges}
               disabled={loading}
               variant="black"
               size="lg"
               className="w-full mb-4"
             >
-              {loading ? "Saving..." : "Save and Return to Dashboard"}
+              {loading ? "Saving..." : (hasProfileChanges ? "Save Profile and Return to Dashboard" : "Save Pet/Task Changes and Return to Dashboard")}
             </Button>
           </div>
         </div>
