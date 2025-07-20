@@ -74,8 +74,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
       
+      console.log("Auth state change:", { event, sessionUserId: session?.user?.id, currentUserId: user?.id });
+      
       // Only update if the session actually changed
       if (session?.user?.id !== user?.id) {
+        console.log("Session changed, updating auth state");
         setSession(session);
         setUser(session?.user ?? null);
         
@@ -87,6 +90,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         
         setLoading(false);
+      } else {
+        console.log("Session unchanged, skipping update");
       }
     });
 
@@ -94,7 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [user?.id]);
+  }, []);
 
   const refreshUserRecord = async () => {
     if (!user) return;
@@ -114,12 +119,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       userRecord,
       signOut: async () => {
+        console.log("Sign out initiated");
         try {
-          await supabase.auth.signOut();
+          // Clear all state first
           setUser(null);
           setSession(null);
           setUserRecord(null);
           setLoading(false);
+          
+          // Then sign out from Supabase
+          await supabase.auth.signOut();
+          console.log("Sign out successful");
+          
+          // Force redirect
           window.location.href = '/';
         } catch (error) {
           console.error("Sign out error:", error);
