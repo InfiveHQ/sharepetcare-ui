@@ -18,6 +18,18 @@ export default function DashboardPage() {
   const signInTimeout = useRef<NodeJS.Timeout | null>(null);
   const [userRecordError, setUserRecordError] = useState<string | null>(null);
 
+  // Debug logging
+  console.log("Dashboard render:", {
+    user: user?.id,
+    userRecord: userRecord?.id,
+    loading,
+    showSignIn,
+    refreshTrigger
+  });
+
+  // Add specific loading state debug
+  console.log("Dashboard loading check:", { loading, willShowLoading: loading });
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     window.location.href = '/';
@@ -122,7 +134,13 @@ export default function DashboardPage() {
     return <div className="p-8">Please sign in to view your dashboard.</div>;
   }
 
-  if (!userRecord && user && !loading) {
+  // Show sign in message if no user and not loading
+  if (!user && !loading) {
+    return <div className="p-8">Please sign in to view your dashboard.</div>;
+  }
+
+  // Show profile setup if user exists but no userRecord
+  if (user && !userRecord && !loading) {
     return (
       <div className="p-8">
         {userRecordError ? (

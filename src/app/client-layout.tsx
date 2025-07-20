@@ -29,6 +29,8 @@ function TopBar() {
 }
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
+  console.log("ClientLayout: Component rendered");
+  
   return (
     <AuthProvider>
       <DataProvider>

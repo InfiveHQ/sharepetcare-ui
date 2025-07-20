@@ -560,55 +560,89 @@ export default function DailyTaskChecklist() {
             })()}
           </div>
           {/* Mobile-friendly cards - harmonized with By Pet style */}
-          <div className="md:hidden space-y-4 bg-gray-50 py-6 px-2">
+          <div className="md:hidden space-y-4">
             {activities.map(({ activity, tasks }) => (
-              <div key={activity} className="bg-white shadow rounded-xl p-4 mb-6">
-                <div className="font-bold text-lg text-gray-800 mb-2">{activity}</div>
-                <ul>
-                  {petList.map((pet, idx, arr) => {
+              <div key={activity} className="border rounded-lg p-4">
+                <h3 className="font-semibold text-lg mb-3">{activity}</h3>
+                <div className="space-y-1">
+                  {petList.map((pet) => {
                     const task = tasks.find(t => t.pet_id === pet.id);
                     if (!task) return null;
-                    const isCompleted = task.completed;
+                    
                     return (
-                      <li key={pet.id} className={idx < arr.length - 1 ? 'border-b border-gray-100' : ''}>
-                        <div className="flex items-center py-1">
-                          {/* Completed */}
-                          {isCompleted ? (
-                            <>
-                              <span className="text-green-600 text-xl mr-2">✓</span>
-                              <span className="font-medium text-sm text-gray-400 line-through flex-1 ml-2 truncate">{pet.name}</span>
-                              <span className="text-xs text-gray-400 ml-2 text-right flex-shrink-0">
-                                {task.completed_by} @ {task.completed_at ? new Date(task.completed_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
-                              </span>
-                            </>
-                          ) : (
-                            <>
-                              <span className="text-red-600 text-xl mr-2">○</span>
-                              <span className="font-medium text-sm text-gray-700 flex-1 ml-2 truncate">{pet.name}</span>
-                              <span className="text-xs text-gray-400 ml-2 text-right flex-shrink-0">
-                                {task.assigned_user_name} • {task.expected_time ? task.expected_time.substring(0, 5) : ''}
-                              </span>
-                              <button
-                                className="text-blue-600 font-medium rounded px-2 py-1 text-xs active:bg-blue-100 ml-2"
+                      <div
+                        key={pet.id}
+                        className={`p-2 border rounded-lg ${
+                          task.completed 
+                            ? 'bg-gray-200 border-gray-400' 
+                            : 'bg-white border-gray-300 hover:border-gray-400 cursor-pointer'
+                        }`}
+                        onClick={() => handleTaskClick(task)}
+                      >
+                        {task.completed ? (
+                          // Completed task layout
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-green-600">✓</span>
+                                <span className="font-medium text-gray-400 line-through">{pet.name}</span>
+                              </div>
+                              <div 
+                                className="text-sm text-gray-400 cursor-pointer hover:text-blue-600 transition-colors"
                                 onClick={() => handleTaskClick(task)}
+                                title="Click to edit completion details"
                               >
-                                Click to complete
-                              </button>
-                              <button
-                                onClick={e => { e.stopPropagation(); handleQuickComplete(task); }}
-                                className="text-gray-400 hover:text-green-600 text-xl ml-1"
-                                title="Quick complete"
-                                type="button"
-                              >
-                                ⚡
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </li>
+                                {task.completed_by} @ {task.completed_at ? new Date(task.completed_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          // Pending task layout
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-red-600">○</span>
+                                <span className="font-medium text-black">{pet.name}</span>
+                                {task.instructions && (
+                                  <button
+                                    className="text-xs text-gray-400 hover:text-gray-600 underline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      alert(task.instructions);
+                                    }}
+                                    title={task.instructions}
+                                  >
+                                    (Instructions)
+                                  </button>
+                                )}
+                              </div>
+                              <span className="text-sm text-gray-500">
+                                {task.assigned_user_name || "Unassigned"} • {task.expected_time ? task.expected_time.substring(0, 5) : "No time set"}
+                              </span>
+                            </div>
+                            <div className="text-right -mt-1">
+                              <div className="flex items-center justify-end gap-2">
+                                <span className="text-sm text-blue-600 font-medium">
+                                  Click to complete
+                                </span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleQuickComplete(task);
+                                  }}
+                                  className="text-gray-400 hover:text-green-600 transition-colors"
+                                  title="Quick complete (no notes)"
+                                >
+                                  ⚡
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
-                </ul>
+                </div>
               </div>
             ))}
           </div>
