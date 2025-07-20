@@ -112,6 +112,21 @@
   --sidebar-ring: oklch(0.551 0.027 264.364);
 }
 
+.strikethrough-group {
+  position: relative;
+  display: inline-block;
+}
+.strikethrough-group::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px solid #9ca3af; /* Tailwind's gray-400 */
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

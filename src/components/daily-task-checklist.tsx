@@ -164,7 +164,14 @@ export default function DailyTaskChecklist() {
     };
   }, []);
 
+  // Close modal when switching views
+  useEffect(() => {
+    setModalOpen(false);
+    setModalData(null);
+  }, [view]);
+
   const handleTaskClick = (task: DailyTask) => {
+    console.log('handleTaskClick called for task:', task);
     setModalData({
       petTaskId: task.id,
       taskId: task.task_id, // Use the actual task_id from the pet task
@@ -396,75 +403,202 @@ export default function DailyTaskChecklist() {
           By Activity
         </button>
       </div>
-      {/* By Activity Table View */}
-      {view === 'activity' && (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse border border-gray-200 min-w-[900px]">
-            <thead>
-              <tr className="bg-gray-50">
-                <th className="border border-gray-200 px-4 py-2 text-left">Activity</th>
-                {petList.map(pet => (
-                  <th key={pet.id} className="border border-gray-200 px-4 py-2 text-left">{pet.name}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {activities.map(({ activity, tasks }) => (
-                <tr key={activity}>
-                  <td className="border border-gray-200 px-4 py-2 font-semibold bg-gray-50">{activity}</td>
+      {/* By Activity View */}
+      {view === "activity" && (
+        <>
+          {/* Desktop split tables */}
+          <div className="overflow-x-auto hidden md:block">
+            {(() => {
+              // Split petList into chunks of 4
+              const chunkSize = 4;
+              const petChunks = [];
+              for (let i = 0; i < petList.length; i += chunkSize) {
+                petChunks.push(petList.slice(i, i + chunkSize));
+              }
+              return petChunks.map((petChunk, idx) => (
+                <div key={idx} className="mb-8">
+                  {petChunks.length > 1 && (
+                    <div className="mb-2 font-semibold text-gray-700">Pets {idx * chunkSize + 1}–{idx * chunkSize + petChunk.length}</div>
+                  )}
+                  <table className="w-full border-collapse border border-gray-200 min-w-[600px] mb-2">
+                    <thead>
+                      <tr className="bg-gray-50">
+                        <th className="border border-gray-200 px-4 py-2 text-left min-w-[8rem] max-w-[8rem]">Activity</th>
+                        {petChunk.map(pet => (
+                          <th key={pet.id} className="border border-gray-200 px-4 py-2 text-left min-w-[8rem] max-w-[8rem]">{pet.name}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activities.map(({ activity, tasks }) => (
+                        <tr key={activity}>
+                          <td className="border border-gray-200 px-4 py-2 font-semibold bg-gray-50 min-w-[8rem] max-w-[8rem]">{activity}</td>
+                          {petChunk.map(pet => {
+                            const task = tasks.find(t => t.pet_id === pet.id);
+                            if (!task) return <td key={pet.id} className="border border-gray-200 px-4 py-2 bg-gray-100 min-w-[8rem] max-w-[8rem]" />;
+                            return (
+                              <td key={pet.id} className="border border-gray-200 px-4 py-2 align-top min-w-[8rem] max-w-[8rem]">
+                                <div
+                                  className={`rounded-lg p-2 w-full h-full ${task.completed ? 'bg-gray-200 border border-gray-400' : 'bg-white border-gray-300 hover:border-gray-400 cursor-pointer'}`}
+                                  onClick={() => handleTaskClick(task)}
+                                  style={{ minHeight: '48px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center' }}
+                                  role="button"
+                                  tabIndex={0}
+                                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleTaskClick(task); }}
+                                >
+                                  {task.completed ? (
+                                    <>
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-green-600">✓</span>
+                                        <span className="strikethrough-group">
+                                          <span className="font-medium text-sm text-gray-400">
+                                            {task.expected_time ? task.expected_time.substring(0, 5) : ''}
+                                          </span>
+                                          {task.assigned_user_name && (
+                                            <span className="text-xs text-gray-500 ml-1">({task.assigned_user_name})</span>
+                                          )}
+                                        </span>
+                                      </div>
+                                      <div className="text-xs text-gray-400" title="Click to edit completion details">
+                                        {task.completed_by} @ {task.completed_at ? new Date(task.completed_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <span className="font-medium text-sm text-black">
+                                          {task.expected_time ? task.expected_time.substring(0, 5) : ''}
+                                        </span>
+                                        {task.assigned_user_name && (
+                                          <span className="text-xs text-gray-500 ml-1">({task.assigned_user_name})</span>
+                                        )}
+                                        {task.instructions && (
+                                          <button
+                                            className="text-xs text-gray-400 hover:text-gray-600 underline"
+                                            onClick={e => { e.stopPropagation(); alert(task.instructions); }}
+                                            title={task.instructions}
+                                            type="button"
+                                          >
+                                            (Instructions)
+                                          </button>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2 text-sm font-medium">
+                                        <span
+                                          className="text-blue-600 cursor-pointer"
+                                          style={{ marginRight: 4 }}
+                                          onClick={e => { e.stopPropagation(); handleTaskClick(task); }}
+                                        >
+                                          Click to complete
+                                        </span>
+                                        <button
+                                          onClick={e => { e.stopPropagation(); handleQuickComplete(task); }}
+                                          className="text-gray-400 hover:text-green-600 transition-colors text-lg"
+                                          title="Quick complete"
+                                          type="button"
+                                        >
+                                          ⚡
+                                        </button>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ));
+            })()}
+          </div>
+          {/* Mobile-friendly cards */}
+          <div className="md:hidden space-y-4">
+            {activities.map(({ activity, tasks }) => (
+              <div key={activity} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 font-semibold">{activity}</div>
+                <div className="divide-y divide-gray-200">
                   {petList.map(pet => {
                     const task = tasks.find(t => t.pet_id === pet.id);
-                    if (!task) return <td key={pet.id} className="border border-gray-200 px-4 py-2 bg-gray-100" />;
+                    if (!task) return null;
                     return (
-                      <td key={pet.id} className="border border-gray-200 px-4 py-2">
-                        {/* Interactive cell, similar to By Pet view */}
-                        <div
-                          className={`rounded-lg p-2 ${task.completed ? 'bg-gray-200 border border-gray-400' : 'bg-white border border-gray-300 hover:border-gray-400 cursor-pointer'}`}
-                          onClick={() => handleTaskClick(task)}
-                        >
+                      <div key={pet.id} className="flex items-center justify-between p-4">
+                        <div className="flex flex-col flex-1">
+                          <span className="font-medium text-gray-900">{pet.name}</span>
                           {task.completed ? (
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-green-600">✓</span>
-                                <span className="font-medium text-gray-400 line-through">{task.expected_time ? task.expected_time.substring(0, 5) : ''}</span>
-                              </div>
-                              <div className="text-xs text-gray-400 cursor-pointer hover:text-blue-600 transition-colors" title="Click to edit completion details">
-                                {task.completed_by} @ {task.completed_at ? new Date(task.completed_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
-                              </div>
-                            </div>
+                            <span className="strikethrough-group">
+                              <span className="font-medium text-sm text-gray-400">
+                                {task.expected_time ? task.expected_time.substring(0, 5) : ''}
+                              </span>
+                              {task.assigned_user_name && (
+                                <span className="text-xs text-gray-500 ml-1">({task.assigned_user_name})</span>
+                              )}
+                            </span>
                           ) : (
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-red-600">○</span>
-                                <span className="font-medium text-black">{task.expected_time ? task.expected_time.substring(0, 5) : ''}</span>
-                                {task.instructions && (
-                                  <button
-                                    className="text-xs text-gray-400 hover:text-gray-600 underline"
-                                    onClick={e => { e.stopPropagation(); alert(task.instructions); }}
-                                    title={task.instructions}
-                                  >
-                                    (Instructions)
-                                  </button>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 text-sm text-blue-600 font-medium cursor-pointer">
-                                Click to complete
-                                <span className="text-gray-400 hover:text-green-600 transition-colors">⚡</span>
-                              </div>
-                            </div>
+                            <>
+                              <span className="font-medium text-sm text-black">
+                                {task.expected_time ? task.expected_time.substring(0, 5) : ''}
+                              </span>
+                              {task.assigned_user_name && (
+                                <span className="text-xs text-gray-500 ml-1">({task.assigned_user_name})</span>
+                              )}
+                            </>
+                          )}
+                          {task.instructions && (
+                            <button
+                              className="text-xs text-gray-400 hover:text-gray-600 underline text-left"
+                              onClick={e => { e.stopPropagation(); alert(task.instructions); }}
+                              title={task.instructions}
+                            >
+                              (Instructions)
+                            </button>
                           )}
                         </div>
-                      </td>
+                        {task.completed ? (
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            className="flex flex-col items-end flex-1 cursor-pointer w-full text-left outline-none focus:ring-2 focus:ring-blue-400"
+                            onClick={() => handleTaskClick(task)}
+                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleTaskClick(task); }}
+                            style={{ minHeight: '48px' }}
+                          >
+                            <span className="text-green-600 text-lg">✓</span>
+                            <span className="text-xs text-gray-400">
+                              {task.completed_by} @ {task.completed_at ? new Date(task.completed_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 flex-1 justify-end">
+                            <span
+                              className="text-blue-600 text-sm font-medium cursor-pointer"
+                              onClick={() => handleTaskClick(task)}
+                            >
+                              Click to complete
+                            </span>
+                            <button
+                              onClick={e => { e.stopPropagation(); handleQuickComplete(task); }}
+                              className="text-gray-400 hover:text-green-600 transition-colors text-lg"
+                              title="Quick complete"
+                              type="button"
+                            >
+                              ⚡
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
-      {/* By Pet View (default) */}
-      {view === 'pet' && (
+      {/* By Pet View */}
+      {view === "pet" && (
         <>
           {Object.entries(tasksByPet).map(([petName, petTasks]) => (
             <div key={petName} className="border rounded-lg p-4">
@@ -545,125 +679,126 @@ export default function DailyTaskChecklist() {
               </div>
             </div>
           ))}
+        </>
+      )}
+      {/* Completion Modal: always rendered */}
+      {modalOpen && modalData && (
+        <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 bg-black/30 z-40" />
+            <Dialog.Content className="fixed bottom-0 left-0 right-0 bg-white p-6 rounded-t-2xl z-50">
+              <Dialog.Title className="text-lg font-bold mb-4">
+                {modalData && dailyTasks.find(task => task.id === modalData.petTaskId)?.completed 
+                  ? "Edit Task Completion" 
+                  : "Complete Task"
+                }
+              </Dialog.Title>
+              {modalData && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Task</label>
+                    <div className="p-2 bg-gray-50 rounded border">
+                      {modalData.taskName}
+                    </div>
+                  </div>
 
-          {/* Completion Modal */}
-          <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
-            <Dialog.Portal>
-              <Dialog.Overlay className="fixed inset-0 bg-black/30 z-40" />
-              <Dialog.Content className="fixed bottom-0 left-0 right-0 bg-white p-6 rounded-t-2xl z-50">
-                <Dialog.Title className="text-lg font-bold mb-4">
-                  {modalData && dailyTasks.find(task => task.id === modalData.petTaskId)?.completed 
-                    ? "Edit Task Completion" 
-                    : "Complete Task"
-                  }
-                </Dialog.Title>
-                {modalData && (
-                  <div className="space-y-4">
+                  {modalData.instructions && (
                     <div>
-                      <label className="block text-sm font-medium mb-1">Task</label>
-                      <div className="p-2 bg-gray-50 rounded border">
-                        {modalData.taskName}
+                      <label className="block text-sm font-medium mb-1">Instructions</label>
+                      <div className="p-2 bg-gray-50 rounded border text-sm text-gray-600 italic">
+                        "{modalData.instructions}"
                       </div>
                     </div>
+                  )}
 
-                    {modalData.instructions && (
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Instructions</label>
-                        <div className="p-2 bg-gray-50 rounded border text-sm text-gray-600 italic">
-                          "{modalData.instructions}"
-                        </div>
-                      </div>
-                    )}
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Pet</label>
+                    <select
+                      className="w-full border rounded p-2"
+                      value={modalData.petId}
+                      onChange={(e) => setModalData({...modalData, petId: e.target.value})}
+                    >
+                      {pets.map((pet) => (
+                        <option key={pet.id} value={pet.id}>
+                          {pet.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Pet</label>
-                      <select
-                        className="w-full border rounded p-2"
-                        value={modalData.petId}
-                        onChange={(e) => setModalData({...modalData, petId: e.target.value})}
-                      >
-                        {pets.map((pet) => (
-                          <option key={pet.id} value={pet.id}>
-                            {pet.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Completed By</label>
+                    <select
+                      className="w-full border rounded p-2"
+                      value={modalData.userId}
+                      onChange={(e) => setModalData({...modalData, userId: e.target.value})}
+                    >
+                      <option value={user?.id}>{userName}</option>
+                    </select>
+                  </div>
 
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Completed By</label>
-                      <select
-                        className="w-full border rounded p-2"
-                        value={modalData.userId}
-                        onChange={(e) => setModalData({...modalData, userId: e.target.value})}
-                      >
-                        <option value={user?.id}>{userName}</option>
-                      </select>
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Date & Time</label>
+                    <input
+                      type="datetime-local"
+                      className="w-full border rounded p-2"
+                      value={modalData.dateTime}
+                      onChange={(e) => setModalData({...modalData, dateTime: e.target.value})}
+                    />
+                  </div>
 
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Date & Time</label>
-                      <input
-                        type="datetime-local"
-                        className="w-full border rounded p-2"
-                        value={modalData.dateTime}
-                        onChange={(e) => setModalData({...modalData, dateTime: e.target.value})}
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Notes</label>
+                    <textarea
+                      className="w-full border rounded p-2"
+                      value={modalData.notes}
+                      onChange={(e) => setModalData({...modalData, notes: e.target.value})}
+                      placeholder="Add any notes about this task..."
+                    />
+                  </div>
 
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Notes</label>
-                      <textarea
-                        className="w-full border rounded p-2"
-                        value={modalData.notes}
-                        onChange={(e) => setModalData({...modalData, notes: e.target.value})}
-                        placeholder="Add any notes about this task..."
-                      />
-                    </div>
-
-                    <div className="flex gap-3 pt-4">
-                      <button
-                        onClick={() => setModalOpen(false)}
-                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
-                      >
-                        Cancel
-                      </button>
-                      {modalData && dailyTasks.find(task => task.id === modalData.petTaskId)?.completed ? (
-                        <>
-                          <button
-                            onClick={handleCompleteTask}
-                            className="flex-1 px-4 py-2 bg-black text-white rounded-lg"
-                          >
-                            Update Task
-                          </button>
-                          <button
-                            onClick={() => {
-                              const task = dailyTasks.find(t => t.id === modalData.petTaskId);
-                              if (task) {
-                                handleUndoComplete(task);
-                                setModalOpen(false);
-                              }
-                            }}
-                            className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg"
-                          >
-                            Uncomplete
-                          </button>
-                        </>
-                      ) : (
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      onClick={() => setModalOpen(false)}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
+                    >
+                      Cancel
+                    </button>
+                    {modalData && dailyTasks.find(task => task.id === modalData.petTaskId)?.completed ? (
+                      <>
                         <button
                           onClick={handleCompleteTask}
                           className="flex-1 px-4 py-2 bg-black text-white rounded-lg"
                         >
-                          Complete Task
+                          Update Task
                         </button>
-                      )}
-                    </div>
+                        <button
+                          onClick={() => {
+                            const task = dailyTasks.find(t => t.id === modalData.petTaskId);
+                            if (task) {
+                              handleUndoComplete(task);
+                              setModalOpen(false);
+                            }
+                          }}
+                          className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg"
+                        >
+                          Uncomplete
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={handleCompleteTask}
+                        className="flex-1 px-4 py-2 bg-black text-white rounded-lg"
+                      >
+                        Complete Task
+                      </button>
+                    )}
                   </div>
-                )}
-              </Dialog.Content>
-            </Dialog.Portal>
-          </Dialog.Root>
-        </>
+                </div>
+              )}
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
       )}
     </div>
   );
