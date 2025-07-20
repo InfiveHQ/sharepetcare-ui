@@ -59,56 +59,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let mounted = true;
     setLoading(true);
     
-    // Add timeout protection to prevent infinite loading
-    const timeoutId = setTimeout(() => {
-      if (mounted) {
-        console.log("Auth context: Timeout protection triggered - setting loading to false");
-        setLoading(false);
-      }
-    }, 10000); // 10 second timeout
-    
     const getInitialAuth = async () => {
       try {
         console.log("Auth context: Starting initial auth check...");
         
-        // Get initial session and user
+        // Get initial session
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) {
           console.error("Auth context: Session error:", sessionError);
         }
         
-        let currentUser = null;
-        let userError = null;
-        
-        try {
-          const { data: { user }, error } = await supabase.auth.getUser();
-          currentUser = user;
-          userError = error;
-        } catch (error) {
-          console.log("Auth context: Auth session missing (normal for unsigned users)");
-          userError = error;
-        }
-        
-        // Use session user if available, otherwise use direct user
-        currentUser = session?.user || currentUser;
-        
-        console.log("Auth context: Initial auth result:", {
+        console.log("Auth context: Initial session result:", {
           hasSession: !!session,
-          hasUser: !!currentUser,
-          userId: currentUser?.id,
-          sessionError: !!sessionError,
-          userError: !!userError
+          userId: session?.user?.id,
+          sessionError: !!sessionError
         });
         
         if (mounted) {
-          console.log("Auth context: Setting user and session states");
           setSession(session);
-          setUser(currentUser);
+          setUser(session?.user ?? null);
           
-          if (currentUser) {
-            console.log("Auth context: Checking user record for:", currentUser.id);
+          if (session?.user) {
+            console.log("Auth context: Checking user record for:", session.user.id);
             try {
-              const record = await checkUserRecord(currentUser);
+              const record = await checkUserRecord(session.user);
               console.log("Auth context: User record result:", { hasRecord: !!record, recordId: record?.id });
               if (mounted) setUserRecord(record);
             } catch (recordError) {
@@ -116,26 +90,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               if (mounted) setUserRecord(null);
             }
           } else {
-            console.log("Auth context: No current user, setting userRecord to null");
+            console.log("Auth context: No session user, setting userRecord to null");
             setUserRecord(null);
           }
-          console.log("Auth context: About to set loading to false");
           setLoading(false);
           console.log("Auth context: Initial auth complete, loading set to false");
-        } else {
-          console.log("Auth context: Component unmounted, not updating state");
         }
       } catch (error) {
         console.error("Auth context: Error getting initial auth:", error);
         if (mounted) {
-          console.log("Auth context: Error case - setting loading to false");
           setLoading(false);
           setUserRecord(null);
         }
       }
     };
     
-    console.log("Auth context: Calling getInitialAuth");
     getInitialAuth();
 
     // Listen for auth state changes
@@ -144,40 +113,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       console.log("Auth context: Auth state change:", { event, userId: session?.user?.id });
       
-      try {
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        if (session?.user) {
-          console.log("Auth context: Checking user record after auth change for:", session.user.id);
-          try {
-            const record = await checkUserRecord(session.user);
-            console.log("Auth context: User record after auth change:", { hasRecord: !!record, recordId: record?.id });
-            if (mounted) setUserRecord(record);
-          } catch (recordError) {
-            console.error("Auth context: Error checking user record after auth change:", recordError);
-            if (mounted) setUserRecord(null);
-          }
-        } else {
-          console.log("Auth context: No session user, setting userRecord to null");
-          setUserRecord(null);
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (session?.user) {
+        try {
+          const record = await checkUserRecord(session.user);
+          if (mounted) setUserRecord(record);
+        } catch (recordError) {
+          console.error("Auth context: Error checking user record after auth change:", recordError);
+          if (mounted) setUserRecord(null);
         }
-        
-        setLoading(false);
-        console.log("Auth context: Auth state change complete, loading set to false");
-      } catch (error) {
-        console.error("Auth context: Error in auth state change:", error);
-        if (mounted) {
-          setLoading(false);
-          setUserRecord(null);
-        }
+      } else {
+        if (mounted) setUserRecord(null);
       }
+      
+      setLoading(false);
     });
 
     return () => {
-      console.log("Auth context: Cleaning up useEffect");
       mounted = false;
-      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);
@@ -205,12 +160,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userRecord,
       signOut: async () => {
         console.log("Auth context: Signing out...");
-        const { error } = await supabase.auth.signOut();
-        if (error) {
-          console.error("Auth context: Sign out error:", error);
-        } else {
-          console.log("Auth context: Sign out successful");
+        try {
+          const { error } = await supabase.auth.signOut();
+          if (error) {
+            console.error("Auth context: Sign out error:", error);
+            throw error;
+          } else {
+            console.log("Auth context: Sign out successful");
+            // Clear all state
+            setUser(null);
+            setSession(null);
+            setUserRecord(null);
+            setLoading(false);
+            // Force redirect to home page
+            window.location.href = '/';
+          }
+        } catch (error) {
+          console.error("Auth context: Sign out failed:", error);
+          // Even if sign out fails, clear state and redirect
+          setUser(null);
+          setSession(null);
           setUserRecord(null);
+          setLoading(false);
+          window.location.href = '/';
         }
       },
       refreshUserRecord
