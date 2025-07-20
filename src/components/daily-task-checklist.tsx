@@ -194,87 +194,97 @@ export default function DailyTaskChecklist() {
       return;
     }
 
+    // Add timeout protection
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Operation timed out')), 5000); // 5 second timeout
+    });
+
     try {
       // Check if this task is already completed
       const existingTask = dailyTasks.find(task => task.id === modalData.petTaskId);
       const isEditing = existingTask?.completed;
       console.log("Existing task:", existingTask, "isEditing:", isEditing);
 
-      if (isEditing) {
-        console.log("Updating existing task log");
-        // Update existing task log
-        const { error } = await supabase
-          .from("task_logs")
-          .update({
-            pet_id: modalData.petId,
-            user_id: modalData.userId,
-            date_time: new Date(modalData.dateTime).toISOString(),
-            notes: modalData.notes || null
-          })
-          .eq("task_id", modalData.taskId)
-          .eq("pet_id", existingTask.pet_id)
-          .gte("date_time", new Date().toISOString().split('T')[0] + 'T00:00:00')
-          .lt("date_time", new Date().toISOString().split('T')[0] + 'T23:59:59');
+      const operationPromise = (async () => {
+        if (isEditing) {
+          console.log("Updating existing task log");
+          // Update existing task log
+          const { error } = await supabase
+            .from("task_logs")
+            .update({
+              pet_id: modalData.petId,
+              user_id: modalData.userId,
+              date_time: new Date(modalData.dateTime).toISOString(),
+              notes: modalData.notes || null
+            })
+            .eq("task_id", modalData.taskId)
+            .eq("pet_id", existingTask.pet_id)
+            .gte("date_time", new Date().toISOString().split('T')[0] + 'T00:00:00')
+            .lt("date_time", new Date().toISOString().split('T')[0] + 'T23:59:59');
 
-        if (error) {
-          console.error("Failed to update task:", error);
-          alert(`Failed to update task: ${error.message}`);
+          if (error) {
+            console.error("Failed to update task:", error);
+            alert(`Failed to update task: ${error.message}`);
+          } else {
+            console.log("Task updated successfully");
+            // Update local state
+            setDailyTasks(prev => prev.map(task => 
+              task.id === modalData.petTaskId
+                ? { 
+                    ...task, 
+                    completed_at: new Date(modalData.dateTime).toISOString(),
+                    completed_by: userName || user?.email,
+                    pet_id: modalData.petId,
+                    pet_name: modalData.petName,
+                    notes: modalData.notes
+                  }
+                : task
+            ));
+          }
         } else {
-          console.log("Task updated successfully");
-          // Update local state
-          setDailyTasks(prev => prev.map(task => 
-            task.id === modalData.petTaskId
-              ? { 
-                  ...task, 
-                  completed_at: new Date(modalData.dateTime).toISOString(),
-                  completed_by: userName || user?.email,
-                  pet_id: modalData.petId,
-                  pet_name: modalData.petName,
-                  notes: modalData.notes
-                }
-              : task
-          ));
-        }
-      } else {
-        console.log("Creating new task log");
-        // Create new task log
-        const { error } = await supabase
-          .from("task_logs")
-          .insert([{
-            task_id: modalData.taskId,
-            pet_id: modalData.petId,
-            user_id: modalData.userId,
-            date_time: new Date(modalData.dateTime).toISOString(),
-            notes: modalData.notes || null
-          }]);
+          console.log("Creating new task log");
+          // Create new task log
+          const { error } = await supabase
+            .from("task_logs")
+            .insert([{
+              task_id: modalData.taskId,
+              pet_id: modalData.petId,
+              user_id: modalData.userId,
+              date_time: new Date(modalData.dateTime).toISOString(),
+              notes: modalData.notes || null
+            }]);
 
-        if (error) {
-          console.error("Failed to complete task:", error);
-          alert(`Failed to complete task: ${error.message}`);
-        } else {
-          console.log("Task completed successfully");
-          // Update local state
-          setDailyTasks(prev => prev.map(task => 
-            task.id === modalData.petTaskId
-              ? { 
-                  ...task, 
-                  completed: true, 
-                  completed_at: new Date(modalData.dateTime).toISOString(),
-                  completed_by: userName || user?.email,
-                  pet_id: modalData.petId,
-                  pet_name: modalData.petName,
-                  notes: modalData.notes
-                }
-              : task
-          ));
+          if (error) {
+            console.error("Failed to complete task:", error);
+            alert(`Failed to complete task: ${error.message}`);
+          } else {
+            console.log("Task completed successfully");
+            // Update local state
+            setDailyTasks(prev => prev.map(task => 
+              task.id === modalData.petTaskId
+                ? { 
+                    ...task, 
+                    completed: true, 
+                    completed_at: new Date(modalData.dateTime).toISOString(),
+                    completed_by: userName || user?.email,
+                    pet_id: modalData.petId,
+                    pet_name: modalData.petName,
+                    notes: modalData.notes
+                  }
+                : task
+            ));
+          }
         }
-      }
 
-      setModalOpen(false);
-      setModalData(null);
-      
-      // Trigger a global refresh to update logs
-      triggerRefresh();
+        setModalOpen(false);
+        setModalData(null);
+        
+        // Trigger a global refresh to update logs
+        triggerRefresh();
+      })();
+
+      // Race between the operation and timeout
+      await Promise.race([operationPromise, timeoutPromise]);
     } catch (error) {
       console.error("Error completing task:", error);
       alert(`Error completing task: ${error}`);
@@ -288,6 +298,11 @@ export default function DailyTaskChecklist() {
       return;
     }
 
+    // Add timeout protection
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Operation timed out')), 5000); // 5 second timeout
+    });
+
     try {
       console.log("Inserting task log with data:", {
         task_id: task.task_id,
@@ -296,36 +311,41 @@ export default function DailyTaskChecklist() {
         date_time: new Date().toISOString()
       });
 
-      const { error } = await supabase
-        .from("task_logs")
-        .insert([{
-          task_id: task.task_id,
-          pet_id: task.pet_id,
-          user_id: user.id,
-          date_time: new Date().toISOString(),
-          notes: null
-        }]);
+      const operationPromise = (async () => {
+        const { error } = await supabase
+          .from("task_logs")
+          .insert([{
+            task_id: task.task_id,
+            pet_id: task.pet_id,
+            user_id: user.id,
+            date_time: new Date().toISOString(),
+            notes: null
+          }]);
 
-      if (error) {
-        console.error("Failed to quick complete task:", error);
-        alert(`Failed to complete task: ${error.message}`);
-      } else {
-        console.log("Task completed successfully, updating local state");
-        // Update local state
-        setDailyTasks(prev => prev.map(t => 
-          t.id === task.id
-            ? { 
-                ...t, 
-                completed: true, 
-                completed_at: new Date().toISOString(),
-                completed_by: userName || user?.email
-              }
-            : t
-        ));
-        
-        // Trigger a global refresh to update logs
-        triggerRefresh();
-      }
+        if (error) {
+          console.error("Failed to quick complete task:", error);
+          alert(`Failed to complete task: ${error.message}`);
+        } else {
+          console.log("Task completed successfully, updating local state");
+          // Update local state
+          setDailyTasks(prev => prev.map(t => 
+            t.id === task.id
+              ? { 
+                  ...t, 
+                  completed: true, 
+                  completed_at: new Date().toISOString(),
+                  completed_by: userName || user?.email
+                }
+              : t
+          ));
+          
+          // Trigger a global refresh to update logs
+          triggerRefresh();
+        }
+      })();
+
+      // Race between the operation and timeout
+      await Promise.race([operationPromise, timeoutPromise]);
     } catch (error) {
       console.error("Error quick completing task:", error);
       alert(`Error completing task: ${error}`);
@@ -902,7 +922,7 @@ export default function DailyTaskChecklist() {
                           disabled={isProcessing}
                           className="flex-1 px-4 py-3 bg-black text-white rounded-lg text-sm font-medium disabled:opacity-50"
                         >
-                          {isProcessing ? "Processing..." : "Update Task"}
+                          Update
                         </button>
                         <button
                           onClick={async () => {
@@ -927,7 +947,7 @@ export default function DailyTaskChecklist() {
                           disabled={isProcessing}
                           className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
                         >
-                          {isProcessing ? "Processing..." : "Uncomplete"}
+                          Uncomplete
                         </button>
                       </>
                     ) : (
@@ -946,7 +966,7 @@ export default function DailyTaskChecklist() {
                         disabled={isProcessing}
                         className="flex-1 px-4 py-3 bg-black text-white rounded-lg text-sm font-medium disabled:opacity-50"
                       >
-                        {isProcessing ? "Processing..." : "Complete Task"}
+                        Complete Task
                       </button>
                     )}
                   </div>

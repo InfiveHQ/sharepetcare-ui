@@ -71,75 +71,79 @@ export default function ProfilePage() {
         console.log("Profile: Loading data for user:", user.id);
         setDataLoaded(true);
         
-        // Load user data
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('name')
-          .eq('id', user.id)
-          .single();
-        
-        if (userData) {
-          setName(userData.name || "");
-          console.log("Profile: User name loaded:", userData.name);
-        }
+        try {
+          // Load user data
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('name')
+            .eq('id', user.id)
+            .single();
+          
+          if (userData) {
+            setName(userData.name || "");
+            console.log("Profile: User name loaded:", userData.name);
+          }
 
-        // Load pets owned by the current user OR shared with the current user
-        console.log("Profile: Loading pets for user:", user.id);
-        
-        // First try a simpler query to see if we can access pets at all
-        const { data: ownedPets, error: ownedError } = await supabase
-          .from('pets')
-          .select('id, name, owner_id')
-          .eq('owner_id', user.id)
-          .order('name');
-          
-        console.log("Profile: Owned pets query result:", { ownedPets, ownedError });
-        
-        // Then try to get shared pets using email-based sharing
-        const { data: sharedPets, error: sharedError } = await supabase
-          .from('pet_shares')
-          .select('pet_id')
-          .eq('shared_with_email', user.email);
-          
-        console.log("Profile: Shared pets query result:", { sharedPets, sharedError });
-        
-        let sharedPetIds: string[] = [];
-        if (sharedPets) {
-          sharedPetIds = sharedPets.map(share => share.pet_id);
-        }
-        
-        // Get the actual shared pets
-        let sharedPetDetails: any[] = [];
-        if (sharedPetIds.length > 0) {
-          const { data: sharedPetData, error: sharedPetError } = await supabase
+          // Load pets owned by the current user
+          const { data: ownedPets, error: ownedError } = await supabase
             .from('pets')
             .select('id, name, owner_id')
-            .in('id', sharedPetIds)
+            .eq('owner_id', user.id)
             .order('name');
-          sharedPetDetails = sharedPetData || [];
-          console.log("Profile: Shared pet details:", sharedPetDetails);
-        }
-        
-        // Combine the results
-        const allPets = [...(ownedPets || []), ...sharedPetDetails];
-        console.log("Profile: Combined pets:", allPets);
-        
-        if (allPets.length > 0) {
-          setPets(allPets);
-          console.log("Profile: Set pets:", allPets);
-        } else {
-          console.log("Profile: No pets found for user");
-        }
+            
+          console.log("Profile: Owned pets query result:", { ownedPets, ownedError });
+          
+          // Load shared pets using email-based sharing
+          const { data: sharedPets, error: sharedError } = await supabase
+            .from('pet_shares')
+            .select('pet_id')
+            .eq('shared_with_email', user.email);
+            
+          console.log("Profile: Shared pets query result:", { sharedPets, sharedError });
+          
+          let sharedPetIds: string[] = [];
+          if (sharedPets) {
+            sharedPetIds = sharedPets.map(share => share.pet_id);
+          }
+          
+          // Get shared pet details if needed
+          let sharedPetDetails: any[] = [];
+          if (sharedPetIds.length > 0) {
+            const { data: sharedPetData, error: sharedPetError } = await supabase
+              .from('pets')
+              .select('id, name, owner_id')
+              .in('id', sharedPetIds)
+              .order('name');
+            sharedPetDetails = sharedPetData || [];
+            console.log("Profile: Shared pet details:", sharedPetDetails);
+          }
+          
+          // Combine the results
+          const allPets = [...(ownedPets || []), ...sharedPetDetails];
+          console.log("Profile: Combined pets:", allPets);
+          
+          if (allPets.length > 0) {
+            setPets(allPets);
+            console.log("Profile: Set pets:", allPets);
+          } else {
+            console.log("Profile: No pets found for user");
+          }
 
-        // Load tasks
-        const { data: tasksData, error: tasksError } = await supabase
-          .from('tasks')
-          .select('id, name, icon, default_time, default_user, sort_order')
-          .order('sort_order', { ascending: true });
+          // Load tasks
+          const { data: tasksData, error: tasksError } = await supabase
+            .from('tasks')
+            .select('id, name, icon, default_time, default_user, sort_order')
+            .order('sort_order', { ascending: true });
 
-        if (tasksData) {
-          setTasks(tasksData);
-          console.log("Profile: Tasks loaded:", tasksData.length);
+          if (tasksData) {
+            setTasks(tasksData);
+            console.log("Profile: Tasks loaded:", tasksData.length);
+          }
+        } catch (error) {
+          console.error("Profile loading error:", error);
+          // Reset dataLoaded so it can retry
+          setDataLoaded(false);
+          alert(`Failed to load profile: ${error.message}`);
         }
       }
     };
