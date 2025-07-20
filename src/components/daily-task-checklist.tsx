@@ -187,14 +187,20 @@ export default function DailyTaskChecklist() {
   };
 
   const handleCompleteTask = async () => {
-    if (!modalData || !user) return;
+    console.log("handleCompleteTask called with modalData:", modalData);
+    if (!modalData || !user) {
+      console.log("No modalData or user, returning");
+      return;
+    }
 
     try {
       // Check if this task is already completed
       const existingTask = dailyTasks.find(task => task.id === modalData.petTaskId);
       const isEditing = existingTask?.completed;
+      console.log("Existing task:", existingTask, "isEditing:", isEditing);
 
       if (isEditing) {
+        console.log("Updating existing task log");
         // Update existing task log
         const { error } = await supabase
           .from("task_logs")
@@ -211,7 +217,9 @@ export default function DailyTaskChecklist() {
 
         if (error) {
           console.error("Failed to update task:", error);
+          alert(`Failed to update task: ${error.message}`);
         } else {
+          console.log("Task updated successfully");
           // Update local state
           setDailyTasks(prev => prev.map(task => 
             task.id === modalData.petTaskId
@@ -227,6 +235,7 @@ export default function DailyTaskChecklist() {
           ));
         }
       } else {
+        console.log("Creating new task log");
         // Create new task log
         const { error } = await supabase
           .from("task_logs")
@@ -240,7 +249,9 @@ export default function DailyTaskChecklist() {
 
         if (error) {
           console.error("Failed to complete task:", error);
+          alert(`Failed to complete task: ${error.message}`);
         } else {
+          console.log("Task completed successfully");
           // Update local state
           setDailyTasks(prev => prev.map(task => 
             task.id === modalData.petTaskId
@@ -265,6 +276,7 @@ export default function DailyTaskChecklist() {
       triggerRefresh();
     } catch (error) {
       console.error("Error completing task:", error);
+      alert(`Error completing task: ${error}`);
     }
   };
 
@@ -762,7 +774,7 @@ export default function DailyTaskChecklist() {
         <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 bg-black/30 z-40" />
-            <Dialog.Content className="fixed bottom-0 left-0 right-0 bg-white p-6 rounded-t-2xl z-50">
+            <Dialog.Content className="fixed bottom-0 left-0 right-0 bg-white p-6 rounded-t-2xl z-50 max-h-[80vh] overflow-y-auto">
               <Dialog.Title className="text-lg font-bold mb-4">
                 {modalData && dailyTasks.find(task => task.id === modalData.petTaskId)?.completed 
                   ? "Edit Task Completion" 
@@ -843,7 +855,10 @@ export default function DailyTaskChecklist() {
                     {modalData && dailyTasks.find(task => task.id === modalData.petTaskId)?.completed ? (
                       <>
                         <button
-                          onClick={handleCompleteTask}
+                          onClick={() => {
+                            console.log("Update Task button clicked");
+                            handleCompleteTask();
+                          }}
                           className="flex-1 px-4 py-2 bg-black text-white rounded-lg"
                         >
                           Update Task
@@ -863,7 +878,10 @@ export default function DailyTaskChecklist() {
                       </>
                     ) : (
                       <button
-                        onClick={handleCompleteTask}
+                        onClick={() => {
+                          console.log("Complete Task button clicked");
+                          handleCompleteTask();
+                        }}
                         className="flex-1 px-4 py-2 bg-black text-white rounded-lg"
                       >
                         Complete Task
