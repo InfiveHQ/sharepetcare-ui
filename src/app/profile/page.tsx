@@ -39,6 +39,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
   
   // Pet task management state
   const [showAddPetTask, setShowAddPetTask] = useState(false);
@@ -54,11 +55,20 @@ export default function ProfilePage() {
     instructions: ""
   });
 
+  // Debug logging
+  console.log("Profile page render:", {
+    user: user?.id,
+    userRecord: userRecord?.id,
+    authLoading,
+    dataLoaded
+  });
+
   // Load current user data and pets
   useEffect(() => {
     const loadData = async () => {
-      if (user && userRecord) {
+      if (user && userRecord && !dataLoaded) {
         console.log("Profile: Loading data for user:", user.id);
+        setDataLoaded(true);
         
         // Load user data
         const { data: userData, error: userError } = await supabase
@@ -132,9 +142,8 @@ export default function ProfilePage() {
         }
       }
     };
-
     loadData();
-  }, [user, userRecord]);
+  }, [user, userRecord, dataLoaded]);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -632,7 +641,16 @@ export default function ProfilePage() {
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-xl p-8 shadow-lg max-w-md w-full">
           <h1 className="text-2xl font-bold text-center mb-6">Profile</h1>
-          <p className="text-center text-gray-600">Loading...</p>
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading...</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            >
+              Refresh Page
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -653,8 +671,29 @@ export default function ProfilePage() {
     );
   }
 
+  // Show loading if user exists but userRecord is still loading
+  if (user && !userRecord && !authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl p-8 shadow-lg max-w-md w-full">
+          <h1 className="text-2xl font-bold text-center mb-6">Profile</h1>
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black mx-auto mb-4"></div>
+            <p className="text-gray-600">Setting up your profile...</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            >
+              Refresh Page
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Show error if user record doesn't exist
-  if (!userRecord) {
+  if (!userRecord && user && !authLoading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-xl p-8 shadow-lg max-w-md w-full">
