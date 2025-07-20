@@ -72,6 +72,12 @@ export default function ProfilePage() {
         console.log("Profile: User record:", userRecord);
         setDataLoaded(true);
         
+        // Add timeout protection for profile loading
+        const timeoutId = setTimeout(() => {
+          console.log("Profile: Loading timeout triggered");
+          setDataLoaded(false); // Allow retry
+        }, 10000); // 10 second timeout
+        
         try {
           // Load user data
           const { data: userData, error: userError } = await supabase
@@ -140,8 +146,11 @@ export default function ProfilePage() {
             setTasks(tasksData);
             console.log("Profile: Tasks loaded:", tasksData.length);
           }
+          
+          clearTimeout(timeoutId);
         } catch (error) {
           console.error("Profile loading error:", error);
+          clearTimeout(timeoutId);
           // Reset dataLoaded so it can retry
           setDataLoaded(false);
           alert(`Failed to load profile: ${error.message}`);
@@ -688,16 +697,22 @@ export default function ProfilePage() {
             <p className="text-gray-600">Setting up your profile...</p>
             <p className="text-xs text-gray-500 mt-2">This may take a moment for shared users</p>
             <button 
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                // Force refresh the auth context
+                window.location.href = '/?refresh=' + Date.now();
+              }}
               className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
             >
-              Refresh Page
+              Refresh Auth
             </button>
             <button 
-              onClick={() => window.location.href = '/'}
+              onClick={() => {
+                // Skip profile setup and go directly to dashboard
+                window.location.href = '/';
+              }}
               className="mt-2 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 block w-full"
             >
-              Go to Dashboard
+              Skip to Dashboard
             </button>
           </div>
         </div>
