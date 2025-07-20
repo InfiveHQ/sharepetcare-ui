@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/utils/supabase";
 import { useData } from "@/contexts/data-context";
+import { useAuth } from "@/contexts/auth-context";
 
 type TaskLog = {
   id: string;
@@ -16,6 +17,7 @@ export function useTodayLogs() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<any>(null);
   const { refreshTrigger } = useData();
+  const { user } = useAuth();
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -45,8 +47,13 @@ export function useTodayLogs() {
   };
 
   useEffect(() => {
-    fetchLogs();
-  }, [refreshTrigger]);
+    if (user) {
+      fetchLogs();
+    } else {
+      setLoading(false);
+      setLogs([]);
+    }
+  }, [refreshTrigger, user]);
 
   return { logs, loading, error, refresh: fetchLogs };
 }

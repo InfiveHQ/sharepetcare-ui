@@ -1,7 +1,7 @@
 // src/app/dashboard/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/utils/supabase";
 import { useAuth } from "@/contexts/auth-context";
 import { useData } from "@/contexts/data-context";
@@ -14,6 +14,9 @@ export default function DashboardPage() {
   const { user, loading, userRecord } = useAuth();
   const { refreshTrigger } = useData();
   const router = useRouter();
+  const [showSignIn, setShowSignIn] = useState(false);
+  const signInTimeout = useRef<NodeJS.Timeout | null>(null);
+  const [userRecordError, setUserRecordError] = useState<string | null>(null);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -24,8 +27,6 @@ export default function DashboardPage() {
   useEffect(() => {
     const createUserRecord = async () => {
       if (!loading && user && !userRecord) {
-        console.log("User authenticated but no user record found, creating user record automatically");
-        
         try {
           const { data, error } = await supabase
             .from('users')
@@ -36,36 +37,56 @@ export default function DashboardPage() {
             }])
             .select()
             .single();
-          
-          if (error) {
+          if (error && (error.message || error.code)) {
             console.error("Failed to create user record:", error);
-            // If creation fails, redirect to profile
-            router.push('/profile');
+            setUserRecordError("Failed to create user record. Please contact support.");
           } else {
-            console.log("User record created successfully:", data);
-            // Refresh the page to update the auth context
-            window.location.reload();
+            setUserRecordError(null);
           }
         } catch (error) {
           console.error("Error creating user record:", error);
-          router.push('/profile');
+          setUserRecordError("Failed to create user record. Please contact support.");
         }
       }
     };
-
     createUserRecord();
-  }, [loading, user, userRecord, router]);
+  }, [loading, user, userRecord]);
+
+  useEffect(() => {
+    if (!user && !loading) {
+      signInTimeout.current = setTimeout(() => setShowSignIn(true), 400);
+    } else {
+      setShowSignIn(false);
+      if (signInTimeout.current) clearTimeout(signInTimeout.current);
+    }
+    return () => {
+      if (signInTimeout.current) clearTimeout(signInTimeout.current);
+    };
+  }, [user, loading]);
 
   if (loading) {
-    return <div className="p-8">Loading...</div>;
+    return (
+      <div className="p-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black mx-auto"></div>
+          <p className="mt-2 text-gray-600">Loading...</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            Refresh Page
+          </button>
+        </div>
+      </div>
+    );
   }
 
-  if (!user) {
+  if (showSignIn) {
     return <div className="p-8">Please sign in to view your dashboard.</div>;
   }
 
-  if (!userRecord) {
-    return <div className="p-8">Setting up your profile...</div>;
+  if (!userRecord && user && !loading) {
+    return <div className="p-8">{userRecordError ? <div className="text-red-600">{userRecordError}</div> : "Setting up your profile..."}</div>;
   }
 
   console.log("Dashboard render:", {
@@ -76,23 +97,16 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-100">
       <div className="max-w-6xl mx-auto p-2 sm:p-4">
+        {/* Remove navigation tabs above the card */}
         <div className="bg-white rounded-xl p-4 sm:p-8 shadow-lg">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 sm:gap-0 mb-6">
+          <div className="flex justify-between items-center mb-6">
             <h1 className="text-xl sm:text-2xl font-bold">Dashboard</h1>
-            <div className="flex gap-2 sm:gap-3">
-              <a 
-                href="/profile" 
-                className="bg-black text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors text-sm sm:text-base"
-              >
-                Profile
-              </a>
-              <button
-                onClick={handleSignOut}
-                className="bg-gray-500 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors text-sm sm:text-base"
-              >
-                Sign Out
-              </button>
-            </div>
+            <a
+              href="/profile"
+              className="bg-black text-white px-4 py-2 rounded-lg font-semibold shadow hover:bg-gray-800 transition-colors"
+            >
+              Profile
+            </a>
           </div>
           
           <div className="mt-8 space-y-6">

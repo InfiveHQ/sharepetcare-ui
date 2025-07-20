@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTasks } from "@/hooks/useTasks";
 import { usePets } from "@/hooks/usePets";
 import { usePetTasks } from "@/hooks/usePetTasks";
@@ -17,16 +17,20 @@ type PetTaskAssignment = {
 };
 
 type PetTaskAssignmentProps = {
-  pets: { id: string; name: string }[];
+  pets: { id: string; name: string; owner_id?: string }[];
   tasks: { id: string; name: string }[];
 };
 
 export default function PetTaskAssignment({ pets, tasks }: PetTaskAssignmentProps) {
   const { petTasks, refresh: refreshPetTasks } = usePetTasks();
   const { user } = useAuth();
+  const { loading: petsLoading } = usePets();
+  const { loading: tasksLoading } = useTasks();
   const [assignments, setAssignments] = useState<PetTaskAssignment[]>([]);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [userName, setUserName] = useState<string>("");
+  const [availableUsers, setAvailableUsers] = useState<{ [petId: string]: { id: string; name: string; email: string }[] }>({});
+  const cleanupTimeout = useRef<NodeJS.Timeout | null>(null);
 
   // Load user's name from database
   useEffect(() => {
@@ -49,6 +53,67 @@ export default function PetTaskAssignment({ pets, tasks }: PetTaskAssignmentProp
 
     loadUserName();
   }, [user]);
+
+  // Load available users for pet task assignment
+  useEffect(() => {
+    const loadAvailableUsers = async () => {
+      if (!pets.length) return;
+
+      try {
+        const usersByPet: { [petId: string]: { id: string; name: string; email: string }[] } = {};
+        
+        for (const pet of pets) {
+          const petUsers: { id: string; name: string; email: string }[] = [];
+          // 1. Get the pet owner
+          const { data: petData } = await supabase
+            .from('pets')
+            .select('owner_id')
+            .eq('id', pet.id)
+            .single();
+          if (petData?.owner_id) {
+            const { data: ownerData } = await supabase
+              .from('users')
+              .select('id, name, email')
+              .eq('id', petData.owner_id)
+              .single();
+            if (ownerData) {
+              petUsers.push({
+                id: ownerData.id,
+                name: ownerData.name || ownerData.email?.split('@')[0] || 'Unknown',
+                email: ownerData.email
+              });
+            }
+          }
+          // 2. Get all users who have access to this pet (shared)
+          const { data: sharedUsers } = await supabase
+            .from('pet_shares')
+            .select('shared_with_email')
+            .eq('pet_id', pet.id);
+          if (sharedUsers) {
+            for (const share of sharedUsers) {
+              const { data: userData } = await supabase
+                .from('users')
+                .select('id, name, email')
+                .eq('email', share.shared_with_email)
+                .single();
+              if (userData && !petUsers.find(u => u.id === userData.id)) {
+                petUsers.push({
+                  id: userData.id,
+                  name: userData.name || userData.email?.split('@')[0] || 'Unknown',
+                  email: userData.email
+                });
+              }
+            }
+          }
+          usersByPet[pet.id] = petUsers;
+        }
+        setAvailableUsers(usersByPet);
+      } catch (error) {
+        console.error("Error loading available users:", error);
+      }
+    };
+    loadAvailableUsers();
+  }, [pets]);
 
   // Initialize assignments matrix
   useEffect(() => {
@@ -114,44 +179,41 @@ export default function PetTaskAssignment({ pets, tasks }: PetTaskAssignmentProp
 
   // Clean up assignments for deleted pets/tasks
   useEffect(() => {
-    const cleanupOrphanedAssignments = async () => {
-      if (petTasks.length > 0 && pets.length > 0 && tasks.length > 0) {
-        const petIds = pets.map(p => p.id);
-        const taskIds = tasks.map(t => t.id);
-        
-        // Find assignments that reference deleted pets or tasks
-        const orphanedAssignments = petTasks.filter(pt => 
-          !petIds.includes(pt.pet_id) || !taskIds.includes(pt.task_id)
-        );
-        
-        console.log("PetTaskAssignment: Found orphaned assignments", {
-          orphanedCount: orphanedAssignments.length,
-          totalPetTasks: petTasks.length
-        });
-        
-        // Delete orphaned assignments
-        for (const assignment of orphanedAssignments) {
-          console.log("PetTaskAssignment: Deleting orphaned assignment", assignment);
-          const { error } = await supabase
-            .from("pet_tasks")
-            .delete()
-            .eq("pet_id", assignment.pet_id)
-            .eq("task_id", assignment.task_id);
-          
-          if (error) {
-            console.error("PetTaskAssignment: Failed to delete orphaned assignment", error);
+    // Only run cleanup if pets and tasks are loaded and non-empty
+    if (petsLoading || tasksLoading) return;
+    if (!pets.length || !tasks.length) return;
+    if (cleanupTimeout.current) clearTimeout(cleanupTimeout.current);
+    cleanupTimeout.current = setTimeout(() => {
+      console.log("[CLEANUP] pets:", pets);
+      console.log("[CLEANUP] tasks:", tasks);
+      console.log("[CLEANUP] petTasks:", petTasks);
+      const cleanupOrphanedAssignments = async () => {
+        if (petTasks.length > 0 && pets.length > 0 && tasks.length > 0) {
+          const petIds = pets.map(p => p.id);
+          const taskIds = tasks.map(t => t.id);
+          // Find assignments that reference deleted pets or tasks
+          const orphanedAssignments = petTasks.filter(pt => 
+            !petIds.includes(pt.pet_id) || !taskIds.includes(pt.task_id)
+          );
+          // Delete orphaned assignments
+          for (const assignment of orphanedAssignments) {
+            await supabase
+              .from("pet_tasks")
+              .delete()
+              .eq("pet_id", assignment.pet_id)
+              .eq("task_id", assignment.task_id);
+          }
+          if (orphanedAssignments.length > 0) {
+            refreshPetTasks();
           }
         }
-        
-        if (orphanedAssignments.length > 0) {
-          console.log("PetTaskAssignment: Refreshing pet tasks after cleanup");
-          refreshPetTasks();
-        }
-      }
+      };
+      cleanupOrphanedAssignments();
+    }, 500);
+    return () => {
+      if (cleanupTimeout.current) clearTimeout(cleanupTimeout.current);
     };
-
-    cleanupOrphanedAssignments();
-  }, [pets, tasks, petTasks, refreshPetTasks]);
+  }, [pets, tasks, petTasks, refreshPetTasks, petsLoading, tasksLoading]);
 
   const handleCheckboxChange = async (petId: string, taskId: string, checked: boolean) => {
     if (!user) return;
@@ -374,7 +436,11 @@ export default function PetTaskAssignment({ pets, tasks }: PetTaskAssignmentProp
                       }`}
                     >
                       <option value="">Select user</option>
-                      <option value={user?.id}>{userName}</option>
+                      {(availableUsers[assignment.pet_id] || []).map(user => (
+                        <option key={user.id} value={user.id}>
+                          {user.name}
+                        </option>
+                      ))}
                     </select>
                   </td>
                   <td className="border border-gray-200 px-4 py-2">
@@ -468,7 +534,11 @@ export default function PetTaskAssignment({ pets, tasks }: PetTaskAssignmentProp
                             className="w-full p-2 rounded border text-sm bg-white border-gray-300"
                           >
                             <option value="">Select user</option>
-                            <option value={user?.id}>{userName}</option>
+                            {(availableUsers[assignment.pet_id] || []).map(user => (
+                              <option key={user.id} value={user.id}>
+                                {user.name}
+                              </option>
+                            ))}
                           </select>
                         </div>
 

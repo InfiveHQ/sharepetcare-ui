@@ -60,11 +60,11 @@ export function usePets() {
         
       console.log("Owned pets query result:", { ownedPets, ownedError });
       
-      // Get shared pets
+      // Get shared pets using email
       const { data: sharedPets, error: sharedError } = await supabase
         .from('pet_shares')
         .select('pet_id')
-        .eq('shared_with_id', user.id);
+        .eq('shared_with_email', user.email);
         
       console.log("Shared pets query result:", { sharedPets, sharedError });
       

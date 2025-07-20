@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useTodayLogs } from "@/hooks/useTodayLogs";
 import { useData } from "@/contexts/data-context";
 import { supabase } from "@/utils/supabase";
+import { usePets } from "@/hooks/usePets";
 
 type LogWithDetails = {
   id: string;
@@ -20,13 +21,17 @@ type LogWithDetails = {
 export default function DailyLog() {
   const { logs, loading, error } = useTodayLogs();
   const { refreshTrigger } = useData();
+  const { pets } = usePets();
   const [logsWithDetails, setLogsWithDetails] = useState<LogWithDetails[]>([]);
   const [detailsLoading, setDetailsLoading] = useState(false);
 
   // Fetch additional details for the logs
   useEffect(() => {
     const fetchDetails = async () => {
-      if (logs.length === 0) {
+      // Only include logs for pets the user has access to (owned, shared with, or shared by)
+      const allowedPetIds = pets.map(p => p.id);
+      const filteredLogs = logs.filter(log => allowedPetIds.includes(log.pet_id));
+      if (filteredLogs.length === 0) {
         setLogsWithDetails([]);
         return;
       }
@@ -35,9 +40,9 @@ export default function DailyLog() {
       
       try {
         // Get unique IDs
-        const petIds = [...new Set(logs.map(log => log.pet_id))];
-        const taskIds = [...new Set(logs.map(log => log.task_id))];
-        const userIds = [...new Set(logs.map(log => log.user_id))];
+        const petIds = [...new Set(filteredLogs.map(log => log.pet_id))];
+        const taskIds = [...new Set(filteredLogs.map(log => log.task_id))];
+        const userIds = [...new Set(filteredLogs.map(log => log.user_id))];
 
         // Fetch pets, tasks, and users
         const [petsResult, tasksResult, usersResult] = await Promise.all([
@@ -51,7 +56,7 @@ export default function DailyLog() {
         const users = usersResult.data || [];
 
         // Combine the data
-        const logsWithDetails = logs.map(log => ({
+        const logsWithDetails = filteredLogs.map(log => ({
           ...log,
           pet_name: pets.find(p => p.id === log.pet_id)?.name || 'Unknown Pet',
           task_name: tasks.find(t => t.id === log.task_id)?.name || 'Unknown Task',
@@ -67,7 +72,7 @@ export default function DailyLog() {
     };
 
     fetchDetails();
-  }, [logs, refreshTrigger]);
+  }, [logs, pets, refreshTrigger]);
 
   if (loading || detailsLoading) {
     return (

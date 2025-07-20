@@ -7,6 +7,7 @@ import { usePetTasks, PetTask } from "@/hooks/usePetTasks";
 import { supabase } from "@/utils/supabase";
 import PetTaskAssignment from "@/components/pet-task-assignment";
 import SharePetModal from "@/components/share-pet-modal";
+import { Button } from "@/components/ui/button";
 
 // dnd-kit sortable refactor for task list
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -83,11 +84,11 @@ export default function ProfilePage() {
           
         console.log("Profile: Owned pets query result:", { ownedPets, ownedError });
         
-        // Then try to get shared pets using a different approach
+        // Then try to get shared pets using email-based sharing
         const { data: sharedPets, error: sharedError } = await supabase
           .from('pet_shares')
           .select('pet_id')
-          .eq('shared_with_id', user.id);
+          .eq('shared_with_email', user.email);
           
         console.log("Profile: Shared pets query result:", { sharedPets, sharedError });
         
@@ -685,7 +686,12 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-gray-100 p-4">
       <div className="max-w-6xl mx-auto">
         <div className="bg-white rounded-xl p-8 shadow-lg">
-          <h1 className="text-2xl font-bold text-center mb-6">Profile & Management</h1>
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-2xl font-bold">Profile & Management</h1>
+            <Button variant="black" size="default" asChild>
+              <a href="/">Dashboard</a>
+            </Button>
+          </div>
           
           <div className="space-y-8">
             {/* User Profile Section */}
@@ -715,19 +721,26 @@ export default function ProfilePage() {
                   />
                 </div>
 
-                <button
+                <Button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-black text-white py-3 rounded-lg font-medium disabled:opacity-50 hover:bg-gray-800 active:bg-gray-900 transform active:scale-95 transition-all duration-150 shadow-md hover:shadow-lg active:shadow-sm"
+                  variant="black"
+                  size="lg"
+                  className="w-full"
                 >
                   {loading ? "Updating..." : "Update Profile"}
-                </button>
+                </Button>
               </form>
             </div>
 
             {/* Pets Section */}
             <div className="bg-white rounded-lg p-6 border">
-              <h2 className="text-lg font-semibold mb-4">Your Pets</h2>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold">Your Pets</h2>
+                <Button variant="outline" size="sm" asChild>
+                  <a href="/shared-pets">Shared Pets</a>
+                </Button>
+              </div>
               <div className="space-y-3">
                 {pets.map((pet) => (
                   <PetItem 
@@ -785,19 +798,15 @@ export default function ProfilePage() {
           )}
 
           <div className="mt-6 pt-6 border-t">
-            <button
+            <Button
               onClick={handleSaveChanges}
               disabled={loading}
-              className="w-full bg-black text-white py-3 rounded-lg font-medium disabled:opacity-50 hover:bg-gray-800 active:bg-gray-900 transform active:scale-95 transition-all duration-150 shadow-md hover:shadow-lg active:shadow-sm mb-4"
+              variant="black"
+              size="lg"
+              className="w-full mb-4"
             >
               {loading ? "Saving..." : "Save and Return to Dashboard"}
-            </button>
-            <a 
-              href="/"
-              className="block text-center text-blue-600 underline"
-            >
-              Back to Dashboard
-            </a>
+            </Button>
           </div>
         </div>
       </div>

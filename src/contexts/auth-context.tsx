@@ -22,92 +22,63 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkUserRecord = async (authUser: User) => {
     if (!authUser) return null;
-    
-    console.log("Checking user record for:", authUser.id, authUser.email);
-    
     try {
       const { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('id', authUser.id)
         .single();
-      
-      if (error) {
-        console.log("User record not found in users table:", error.message);
-        console.log("Error details:", error);
-        return null;
-      }
-      
-      console.log("User record found in users table:", data);
+      if (error) return null;
       return data;
     } catch (error) {
-      console.error("Error checking user record:", error);
       return null;
     }
   };
 
   useEffect(() => {
-    const initializeAuth = async () => {
+    let mounted = true;
+    setLoading(true);
+    const getInitialAuth = async () => {
       try {
-        console.log("Starting auth initialization...");
-        
-        // Get initial session
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        console.log("Initial session check:", session?.user?.email);
-        console.log("Session error:", sessionError);
-        console.log("Full session:", session);
-        
-        // Get current user directly
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        console.log("Direct user check:", user?.email);
-        console.log("User error:", userError);
-        console.log("Full user:", user);
-        
-        // Use session user if available, otherwise use direct user
+        // Get initial session and user
+        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { user } } = await supabase.auth.getUser();
         const currentUser = session?.user || user;
-        console.log("Setting user to:", currentUser?.email);
-        console.log("Current user object:", currentUser);
-        
-        setSession(session);
-        setUser(currentUser);
-        
-        // Check if user record exists in database
-        if (currentUser) {
-          const record = await checkUserRecord(currentUser);
-          setUserRecord(record);
+        if (mounted) {
+          setSession(session);
+          setUser(currentUser);
+          if (currentUser) {
+            const record = await checkUserRecord(currentUser);
+            if (mounted) setUserRecord(record);
+          } else {
+            setUserRecord(null);
+          }
+          setLoading(false);
         }
-        
-        setLoading(false);
-        
-        console.log("Auth initialization complete. User set to:", currentUser?.email);
       } catch (error) {
-        console.error("Auth initialization error:", error);
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     };
+    getInitialAuth();
 
-    initializeAuth();
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      console.log("Auth state changed:", _event, session?.user?.email);
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted) return;
       setSession(session);
       setUser(session?.user ?? null);
-      
-      // Check user record when auth state changes
       if (session?.user) {
         const record = await checkUserRecord(session.user);
-        setUserRecord(record);
+        if (mounted) setUserRecord(record);
       } else {
         setUserRecord(null);
       }
-      
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {

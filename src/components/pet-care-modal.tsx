@@ -107,6 +107,7 @@ export default function PetCareModal() {
                 required
               >
                 <option value="">Select a pet</option>
+                {/* Only show pets the user has access to */}
                 {pets.map((pet) => (
                   <option key={pet.id} value={pet.id}>
                     {pet.name}

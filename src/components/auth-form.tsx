@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/utils/supabase";
 
 export default function AuthForm() {
@@ -11,6 +12,7 @@ export default function AuthForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState("");
+  const router = useRouter();
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,173 +27,43 @@ export default function AuthForm() {
       if (isLogin) {
         result = await supabase.auth.signInWithPassword({ email, password });
       } else {
-        result = await supabase.auth.signUp({ email, password });
+        result = await supabase.auth.signUp({ 
+          email, 
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
+            data: {
+              name: name || email.split('@')[0]
+            }
+          }
+        });
         
-        // If signup is successful, create a user record in the users table
+        // For signup, we'll let the dashboard handle user record creation
+        // This avoids timing issues with authentication
         if (result.data.user && !result.error) {
-          console.log("Auth successful, creating user record for:", result.data.user.id);
+          console.log("Signup successful for:", result.data.user.email);
           
-          // Add a longer delay to ensure auth is complete
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          
-          const userData = {
-            id: result.data.user.id,
-            email: result.data.user.email,
-            name: name || email.split('@')[0] // Use provided name or email prefix as fallback
-          };
-          
-          console.log("Attempting to insert user data:", userData);
-          
-          try {
-                      // First check if user already exists by email
-          const { data: existingUser, error: checkError } = await supabase
-            .from('users')
-            .select('id, name')
-            .eq('email', result.data.user.email)
-            .single();
-          
-          if (checkError && checkError.code !== 'PGRST116') {
-            console.error("Error checking existing user:", checkError);
-          }
-          
-          if (existingUser) {
-            console.log("User already exists, updating with new auth ID:", existingUser);
-            console.log("Current auth user ID:", result.data.user.id);
-            console.log("Existing user ID:", existingUser.id);
-            
-            // Check if this is a placeholder user (created during sharing)
-            // Placeholder users have UUIDs that don't match the auth user ID
-            const isPlaceholder = existingUser.id !== result.data.user.id;
-            console.log("Is placeholder user:", isPlaceholder);
-            console.log("Existing user ID:", existingUser.id);
-            console.log("Auth user ID:", result.data.user.id);
-            
-            if (isPlaceholder) {
-              console.log("Updating placeholder user with real auth ID");
-              
-              // Test if we can update the ID field
-              console.log("Testing ID update from", existingUser.id, "to", result.data.user.id);
-              
-              try {
-                // First, update pet_shares to reference the new auth ID
-                console.log("Updating pet_shares to reference new auth ID...");
-                const { error: petSharesError } = await supabase
-                  .from('pet_shares')
-                  .update({ shared_with_id: result.data.user.id })
-                  .eq('shared_with_id', existingUser.id);
-                
-                if (petSharesError) {
-                  console.error("Failed to update pet_shares:", petSharesError);
-                  setError(`Signup successful but pet sharing failed: ${petSharesError.message}`);
-                  return;
-                }
-                
-                console.log("Successfully updated pet_shares, now deleting placeholder user...");
-                
-                // Delete the placeholder user (now that pet_shares doesn't reference it)
-                const { error: deleteError } = await supabase
-                  .from('users')
-                  .delete()
-                  .eq('id', existingUser.id);
-                
-                if (deleteError) {
-                  console.error("Failed to delete placeholder user:", deleteError);
-                  setError(`Pet sharing updated but user cleanup failed: ${deleteError.message}`);
-                  return;
-                }
-                
-                console.log("Successfully deleted placeholder user, now creating new user record...");
-                
-                // Create a new user record with the correct auth ID
-                const { error: createError } = await supabase
-                  .from('users')
-                  .insert({
-                    id: result.data.user.id,
-                    email: result.data.user.email,
-                    name: name || email.split('@')[0],
-                    updated_at: new Date().toISOString()
-                  });
-
-                if (createError) {
-                  console.error("Failed to create new user record:", createError);
-                  console.error("Create error details:", {
-                    message: createError.message,
-                    code: createError.code,
-                    details: createError.details
-                  });
-                  setError(`Signup successful but profile creation failed: ${createError.message}`);
-                } else {
-                  console.log("Successfully created user and updated pet_shares");
-                  setSuccess("Account created successfully!");
-                  setEmail("");
-                  setPassword("");
-                  setName("");
-                }
-              } catch (error) {
-                console.error("Unexpected error during update:", error);
-                setError(`Signup successful but profile update failed: ${error}`);
-              }
-            } else {
-              // Regular user update
-              console.log("Regular user update (not placeholder)");
-              const { data: updateData, error: updateError } = await supabase
-                .from('users')
-                .update({ 
-                  id: result.data.user.id,
-                  name: name || email.split('@')[0] // Update name if provided
-                })
-                .eq('email', result.data.user.email)
-                .select();
-              
-              if (updateError) {
-                console.error("Failed to update existing user:", updateError);
-                console.error("Update error details:", {
-                  message: updateError.message,
-                  code: updateError.code,
-                  details: updateError.details
-                });
-                
-                // Log the full error object
-                console.error("Full update error object:", JSON.stringify(updateError, null, 2));
-                
-                setError(`Signup successful but profile update failed: ${updateError.message}`);
-              } else {
-                console.log("Existing user updated successfully:", updateData);
-              }
-            }
+          // Check if email confirmation is required
+          if (result.data.user.email_confirmed_at) {
+            setSuccess("Account created successfully!");
           } else {
-            // Create new user
-            console.log("No existing user found, creating new user");
-            const { data: insertData, error: userError } = await supabase
-              .from('users')
-              .insert([userData])
-              .select();
+            // For development, try to sign in immediately after signup
+            console.log("Attempting immediate sign in after signup...");
+            const signInResult = await supabase.auth.signInWithPassword({ email, password });
             
-            console.log("Insert result:", { insertData, userError });
-            
-            if (userError) {
-              console.error("Failed to create user record:", userError);
-              console.error("Error type:", typeof userError);
-              console.error("Error keys:", Object.keys(userError || {}));
-              console.error("Error details:", {
-                message: userError?.message,
-                code: userError?.code,
-                details: userError?.details,
-                hint: userError?.hint
-              });
-              
-              // Log the full error object
-              console.error("Full error object:", JSON.stringify(userError, null, 2));
-              
-              // Show error to user but don't fail signup
-              setError(`Account created but profile setup failed: ${userError.message}`);
+            if (signInResult.error) {
+              console.log("Immediate sign in failed:", signInResult.error);
+              setSuccess("Account created successfully! Please check your email to confirm your account.");
             } else {
-              console.log("User record created successfully:", insertData);
+              console.log("Immediate sign in successful");
+              setSuccess("Account created and signed in successfully!");
+              // Clear form
+              setEmail("");
+              setPassword("");
+              setName("");
+              // Redirect to dashboard
+              setTimeout(() => router.push('/dashboard'), 1500);
             }
-          }
-          } catch (error) {
-            console.error("Unexpected error creating user record:", error);
-            setError("Account created but profile setup failed. Please contact support.");
           }
         }
       }
@@ -211,6 +83,7 @@ export default function AuthForm() {
           setEmail("");
           setPassword("");
           setName("");
+          // Do not redirect to dashboard here; let the app state handle navigation
         }
       }
     } catch (error) {

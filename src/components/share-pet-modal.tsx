@@ -33,122 +33,55 @@ export default function SharePetModal({ pet, onClose }: SharePetModalProps) {
     }
 
     try {
-      // First, check if the partner user exists
-      const { data: partnerUser, error: partnerError } = await supabase
-        .from('users')
-        .select('id, name')
-        .eq('email', partnerEmail)
+      // Check if this pet is already shared with this email
+      const { data: existingShare, error: checkError } = await supabase
+        .from('pet_shares')
+        .select('*')
+        .eq('pet_id', pet.id)
+        .eq('shared_with_email', partnerEmail)
         .single();
 
-      if (partnerError && partnerError.code !== 'PGRST116') {
-        // PGRST116 is "not found" error, which is expected if user doesn't exist
-        console.error("Error checking partner user:", partnerError);
-        setMessage({ type: 'error', text: 'Error checking partner user' });
+      if (existingShare) {
+        setMessage({ type: 'error', text: `${pet.name} is already shared with ${partnerEmail}` });
         setLoading(false);
         return;
       }
 
-      if (!partnerUser) {
-        // Partner doesn't exist, create a placeholder user record
-        // Generate a UUID for the placeholder user
-        const { data: newPartner, error: createError } = await supabase
-          .from('users')
-          .insert([{
-            email: partnerEmail,
-            name: partnerEmail.split('@')[0], // Use email prefix as name
-            // Let Supabase generate the UUID automatically
-          }])
-          .select('id')
-          .single();
+      // Create the pet sharing relationship using email instead of user ID
+      const { error: shareError } = await supabase
+        .from('pet_shares')
+        .insert([{
+          pet_id: pet.id,
+          owner_id: user.id,
+          shared_with_email: partnerEmail,
+          permission: permission
+        }]);
 
-        if (createError) {
-          console.error("Error creating partner user:", createError);
-          console.error("Error details:", {
-            code: createError.code,
-            message: createError.message,
-            details: createError.details,
-            hint: createError.hint
-          });
-          setMessage({ type: 'error', text: `Error creating partner user: ${createError.message}. You may need to run the SQL file first or check RLS policies.` });
-          setLoading(false);
-          return;
-        }
-
-        const newPartnerId = newPartner.id;
-
-        // Now create the pet sharing relationship
-        const { error: shareError } = await supabase
-          .from('pet_shares')
-          .insert([{
-            pet_id: pet.id,
-            owner_id: user.id,
-            shared_with_id: newPartnerId,
-            permission: permission
-          }]);
-
-        if (shareError) {
-          console.error("Error sharing pet:", shareError);
-          setMessage({ type: 'error', text: `Error sharing pet: ${shareError.message}` });
-        } else {
-          // Send email notification
-          try {
-            await fetch('/api/send-share-email', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                toEmail: partnerEmail,
-                petName: pet.name,
-                ownerName: user.email?.split('@')[0] || 'A user',
-                permission: permission
-              })
-            });
-          } catch (emailError) {
-            console.error('Email notification failed:', emailError);
-            // Don't fail the whole operation if email fails
-          }
-
-          setMessage({ type: 'success', text: `Successfully shared ${pet.name} with ${partnerEmail}! Email notification sent.` });
-          setTimeout(() => {
-            onClose();
-          }, 3000);
-        }
+      if (shareError) {
+        console.error("Error sharing pet:", shareError);
+        setMessage({ type: 'error', text: `Error sharing pet: ${shareError.message}` });
       } else {
-        // Partner exists, create the sharing relationship
-        const { error: shareError } = await supabase
-          .from('pet_shares')
-          .insert([{
-            pet_id: pet.id,
-            owner_id: user.id,
-            shared_with_id: partnerUser.id,
-            permission: permission
-          }]);
-
-        if (shareError) {
-          console.error("Error sharing pet:", shareError);
-          setMessage({ type: 'error', text: `Error sharing pet: ${shareError.message}` });
-        } else {
-          // Send email notification
-          try {
-            await fetch('/api/send-share-email', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                toEmail: partnerEmail,
-                petName: pet.name,
-                ownerName: user.email?.split('@')[0] || 'A user',
-                permission: permission
-              })
-            });
-          } catch (emailError) {
-            console.error('Email notification failed:', emailError);
-            // Don't fail the whole operation if email fails
-          }
-
-          setMessage({ type: 'success', text: `Successfully shared ${pet.name} with ${partnerUser.name || partnerEmail}! Email notification sent.` });
-          setTimeout(() => {
-            onClose();
-          }, 3000);
+        // Send email notification (optional)
+        try {
+          await fetch('/api/send-share-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              toEmail: partnerEmail,
+              petName: pet.name,
+              ownerName: user.email?.split('@')[0] || 'A user',
+              permission: permission
+            })
+          });
+        } catch (emailError) {
+          console.error('Email notification failed:', emailError);
+          // Don't fail the whole operation if email fails
         }
+
+        setMessage({ type: 'success', text: `Successfully shared ${pet.name} with ${partnerEmail}! They will see the pet when they sign up with this email.` });
+        setTimeout(() => {
+          onClose();
+        }, 3000);
       }
     } catch (error) {
       console.error("Unexpected error:", error);
@@ -244,7 +177,6 @@ export default function SharePetModal({ pet, onClose }: SharePetModalProps) {
                 <li>See task history</li>
               </>
             )}
-
           </ul>
         </div>
       </div>
