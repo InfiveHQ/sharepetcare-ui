@@ -8,6 +8,7 @@ import { supabase } from "@/utils/supabase";
 import PetTaskAssignment from "@/components/pet-task-assignment";
 import SharePetModal from "@/components/share-pet-modal";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 // dnd-kit sortable refactor for task list
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -728,7 +729,7 @@ export default function ProfilePage() {
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold">Profile & Management</h1>
             <Button variant="black" size="default" asChild>
-              <a href="/">Dashboard</a>
+              <Link href="/">Dashboard</Link>
             </Button>
           </div>
           

@@ -58,6 +58,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let mounted = true;
     setLoading(true);
     
+    // Add timeout protection to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      if (mounted) {
+        console.log("Auth context: Timeout protection triggered - setting loading to false");
+        setLoading(false);
+      }
+    }, 10000); // 10 second timeout
+    
     const getInitialAuth = async () => {
       try {
         console.log("Auth context: Starting initial auth check...");
@@ -168,6 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       console.log("Auth context: Cleaning up useEffect");
       mounted = false;
+      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);

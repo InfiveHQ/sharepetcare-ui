@@ -9,6 +9,7 @@ import DailyTaskChecklist from "@/components/daily-task-checklist";
 import DailyLog from "@/components/daily-log";
 import PetCareModal from "@/components/pet-care-modal";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function DashboardPage() {
   const { user, loading, userRecord } = useAuth();
@@ -119,6 +120,7 @@ export default function DashboardPage() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black mx-auto"></div>
           <p className="mt-2 text-gray-600">Loading...</p>
+          <p className="text-xs text-gray-500 mt-1">If this takes too long, try refreshing</p>
           <button 
             onClick={() => window.location.reload()}
             className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
@@ -177,12 +179,12 @@ export default function DashboardPage() {
                 })}
               </p>
             </div>
-            <a
+            <Link
               href="/profile"
               className="bg-white text-black px-4 py-2 rounded-lg font-semibold shadow border border-gray-300 hover:bg-gray-50 transition-colors"
             >
               Profile
-            </a>
+            </Link>
           </div>
           
           <div className="mt-8 space-y-6">
