@@ -107,10 +107,10 @@ export default function DailyTaskChecklist() {
       // Store the user name for use in task completion
       setUserName(userData?.name || user?.email || "");
 
-      // Get today's completed tasks
+      // Get today's completed tasks with user info
       const { data: completedTasks } = await supabase
         .from("task_logs")
-        .select("task_id, pet_id, date_time, notes")
+        .select("task_id, pet_id, date_time, notes, user_id")
         .gte("date_time", today.toISOString())
         .lt("date_time", tomorrow.toISOString());
 
@@ -123,7 +123,17 @@ export default function DailyTaskChecklist() {
         const completedTask = completedTasks?.find(ct => 
           ct.task_id === petTask.task_id && ct.pet_id === petTask.pet_id
         );
-        const completedBy = userData?.name || user?.email;
+        
+        // Get the actual user who completed the task, or fall back to current user
+        let completedBy = userData?.name || user?.email;
+        if (completedTask?.user_id) {
+          // Try to get the name of the user who actually completed it
+          // For now, we'll use the user_id to determine if it was someone else
+          if (completedTask.user_id !== user?.id) {
+            completedBy = `User ${completedTask.user_id}`; // Placeholder - we could fetch user names if needed
+          }
+        }
+        
         console.log(`Task ${petTask.task_name} for pet ${petTask.pet_name} completed by:`, completedBy);
         return {
           id: petTask.id,
@@ -279,8 +289,8 @@ export default function DailyTaskChecklist() {
         setModalOpen(false);
         setModalData(null);
         
-        // Trigger a global refresh to update logs
-        triggerRefresh();
+        // Don't trigger global refresh - local state update is sufficient
+        // triggerRefresh();
       })();
 
       // Race between the operation and timeout
@@ -339,8 +349,8 @@ export default function DailyTaskChecklist() {
               : t
           ));
           
-          // Trigger a global refresh to update logs
-          triggerRefresh();
+          // Don't trigger global refresh - local state update is sufficient
+          // triggerRefresh();
         }
       })();
 
@@ -401,9 +411,9 @@ export default function DailyTaskChecklist() {
             : t
         ));
         
-        // Trigger a global refresh to update logs
-        triggerRefresh();
-        console.log("Local state updated and refresh triggered");
+        // Don't trigger global refresh - local state update is sufficient
+        // triggerRefresh();
+        console.log("Local state updated");
       }
     } catch (error) {
       console.error("Error undoing task completion:", error);
