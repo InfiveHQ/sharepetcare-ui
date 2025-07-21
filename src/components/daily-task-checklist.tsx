@@ -646,7 +646,7 @@ export default function DailyTaskChecklist() {
                                           <span className="text-xs text-gray-500 ml-1">({task.assigned_user_name})</span>
                                         )}
                                         {!task.completed && task.instructions && (
-                                          <div className="relative group inline-block ml-1">
+                                          <div className="relative inline-block ml-1">
                                             <button
                                               className="text-gray-400 hover:text-gray-600 p-0.5"
                                               onClick={e => { e.stopPropagation(); setInstructionsModal({ open: true, text: task.instructions || '' }); }}
@@ -659,9 +659,6 @@ export default function DailyTaskChecklist() {
                                                 <circle cx="12" cy="8" r="1" />
                                               </svg>
                                             </button>
-                                            <div className="absolute left-1/2 -translate-x-1/2 mt-2 z-50 hidden group-hover:block bg-white text-gray-800 text-sm rounded-lg px-4 py-3 whitespace-pre-line max-w-xs border border-gray-200 shadow-lg">
-                                              {task.instructions}
-                                            </div>
                                           </div>
                                         )}
                                       </>
@@ -810,9 +807,9 @@ export default function DailyTaskChecklist() {
                           />
                           <span className="font-medium text-black truncate">{task.name}</span>
                           {!task.completed && task.instructions && (
-                            <div className="relative group">
+                            <div className="relative inline-block ml-1">
                               <button
-                                className="text-gray-400 hover:text-gray-600 p-0"
+                                className="text-gray-400 hover:text-gray-600 p-0.5"
                                 onClick={e => { e.stopPropagation(); setInstructionsModal({ open: true, text: task.instructions || '' }); }}
                                 type="button"
                               >
@@ -822,10 +819,6 @@ export default function DailyTaskChecklist() {
                                   <circle cx="12" cy="8" r="1" />
                                 </svg>
                               </button>
-                              <div className="absolute left-0 mt-2 z-50 hidden group-hover:block bg-white text-gray-800 text-sm rounded-lg px-4 py-3 whitespace-pre-line max-w-[320px] border border-gray-200 shadow-lg">
-                                <div className="absolute -top-2 left-4 w-3 h-3 bg-white border border-gray-200 rotate-45 shadow"></div>
-                                {task.instructions}
-                              </div>
                             </div>
                           )}
                         </div>
