@@ -614,75 +614,58 @@ export default function DailyTaskChecklist() {
                                   tabIndex={0}
                                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleTaskClick(task); }}
                                 >
-                                  {task.completed ? (
-                                    // Completed task layout
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <span className="text-green-600">✓</span>
-                                      <span className="strikethrough-group">
-                                        <span className="font-medium text-sm text-gray-400">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    {/* Checkbox for marking complete */}
+                                    <button
+                                      className={`w-5 h-5 border-2 border-gray-500 rounded-none bg-white flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-gray-400 ${task.completed ? 'bg-gray-200 border-gray-400' : ''}`}
+                                      onClick={e => { e.stopPropagation(); if (!task.completed) handleQuickComplete(task); }}
+                                      aria-label="Mark task as complete"
+                                      disabled={task.completed}
+                                      style={{ marginRight: 8 }}
+                                    >
+                                      {task.completed && (
+                                        <span className="text-green-600 text-lg">✓</span>
+                                      )}
+                                    </button>
+                                    {task.completed ? (
+                                      // Completed task layout
+                                      <>
+                                        <span className="font-medium text-sm text-gray-400 line-through">
+                                          {task.completed_at ? new Date(task.completed_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+                                        </span>
+                                        {task.completed_by && (
+                                          <span className="text-xs text-gray-500 ml-1">({task.completed_by})</span>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="font-medium text-sm text-black">
                                           {task.expected_time ? task.expected_time.substring(0, 5) : ''}
                                         </span>
                                         {task.assigned_user_name && (
                                           <span className="text-xs text-gray-500 ml-1">({task.assigned_user_name})</span>
                                         )}
-                                      </span>
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <span className="font-medium text-sm text-black">
-                                        {task.expected_time ? task.expected_time.substring(0, 5) : ''}
-                                      </span>
-                                      {task.assigned_user_name && (
-                                        <span className="text-xs text-gray-500 ml-1">({task.assigned_user_name})</span>
-                                      )}
-                                      {!task.completed && task.instructions && (
-                                        <div className="relative group inline-block ml-1">
-                                          <button
-                                            className="text-gray-400 hover:text-gray-600 p-0.5"
-                                            onClick={e => { e.stopPropagation(); setInstructionsModal({ open: true, text: task.instructions || '' }); }}
-                                            title="View info"
-                                            type="button"
-                                          >
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                              <circle cx="12" cy="12" r="10" strokeWidth="2" />
-                                              <line x1="12" y1="16" x2="12" y2="12" strokeWidth="2" />
-                                              <circle cx="12" cy="8" r="1" />
-                                            </svg>
-                                          </button>
-                                          <div className="absolute left-1/2 -translate-x-1/2 mt-2 z-50 hidden group-hover:block bg-white text-gray-800 text-sm rounded-lg px-4 py-3 whitespace-pre-line max-w-xs border border-gray-200 shadow-lg">
-                                            {task.instructions}
+                                        {!task.completed && task.instructions && (
+                                          <div className="relative group inline-block ml-1">
+                                            <button
+                                              className="text-gray-400 hover:text-gray-600 p-0.5"
+                                              onClick={e => { e.stopPropagation(); setInstructionsModal({ open: true, text: task.instructions || '' }); }}
+                                              title="View info"
+                                              type="button"
+                                            >
+                                              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <circle cx="12" cy="12" r="10" strokeWidth="2" />
+                                                <line x1="12" y1="16" x2="12" y2="12" strokeWidth="2" />
+                                                <circle cx="12" cy="8" r="1" />
+                                              </svg>
+                                            </button>
+                                            <div className="absolute left-1/2 -translate-x-1/2 mt-2 z-50 hidden group-hover:block bg-white text-gray-800 text-sm rounded-lg px-4 py-3 whitespace-pre-line max-w-xs border border-gray-200 shadow-lg">
+                                              {task.instructions}
+                                            </div>
                                           </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                  <div className="flex items-center gap-2 text-sm font-medium">
-                                    <span
-                                      className="text-blue-600 cursor-pointer"
-                                      style={{ marginRight: 4 }}
-                                      onClick={e => { e.stopPropagation(); handleTaskClick(task); }}
-                                    >
-                                      Click to complete
-                                    </span>
-                                    <button
-                                      onClick={async (e) => { 
-                                        e.stopPropagation();
-                                        if (isProcessing) return;
-                                        console.log("Lightning bolt clicked for task:", task);
-                                        setIsProcessing(true);
-                                        try {
-                                          await handleQuickComplete(task);
-                                        } finally {
-                                          setIsProcessing(false);
-                                        }
-                                      }}
-                                      disabled={isProcessing}
-                                      className="text-gray-400 hover:text-green-600 transition-colors text-lg disabled:opacity-50"
-                                      title="Quick complete"
-                                      type="button"
-                                    >
-                                      ⚡
-                                    </button>
+                                        )}
+                                      </>
+                                    )}
                                   </div>
                                 </div>
                               </td>
@@ -720,8 +703,8 @@ export default function DailyTaskChecklist() {
                           // Completed task layout
                           <div className="space-y-1">
                             <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="text-green-600">✓</span>
+                              <div className="flex items-center">
+                                <span className="text-green-600 text-lg ml-1 mr-2">✓</span>
                                 <span className="font-medium text-gray-400 line-through">{pet.name}</span>
                               </div>
                               <div 
@@ -737,19 +720,19 @@ export default function DailyTaskChecklist() {
                           // Pending task layout
                           <div className="space-y-1">
                             <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center">
                                 <button
-                                  className="w-5 h-5 border-2 border-gray-500 rounded-none bg-white flex items-center justify-center mr-3 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                  className="w-5 h-5 border-2 border-gray-500 rounded-none bg-white flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-gray-400"
                                   onClick={e => { e.stopPropagation(); handleQuickComplete(task); }}
                                   aria-label="Mark task as complete"
                                 />
-                                <span className="font-medium text-black">{pet.name}</span>
+                                <span className="font-medium text-black ml-2">{pet.name}</span>
                                 {!task.completed && task.instructions && (
                                   <button
                                     className="ml-1 text-gray-400 hover:text-gray-600 p-0.5"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setInstructionsModal({ open: true, text: task.instructions });
+                                      setInstructionsModal({ open: true, text: task.instructions || "" });
                                     }}
                                     title="Instructions/Notes"
                                   >
@@ -764,24 +747,6 @@ export default function DailyTaskChecklist() {
                               <span className="text-sm text-gray-500">
                                 {task.assigned_user_name || "Unassigned"} • {task.expected_time ? task.expected_time.substring(0, 5) : "No time set"}
                               </span>
-                            </div>
-                            <div className="text-right -mt-1">
-                              <div className="flex items-center justify-end gap-2">
-                                <span className="text-sm text-blue-600 font-medium">
-                                  Click to complete
-                                </span>
-                                <button
-                                  onClick={(e) => {
-                                    console.log("Mobile lightning bolt clicked for task:", task);
-                                    e.stopPropagation();
-                                    handleQuickComplete(task);
-                                  }}
-                                  className="text-gray-400 hover:text-green-600 transition-colors"
-                                  title="Quick complete (no notes)"
-                                >
-                                  ⚡
-                                </button>
-                              </div>
                             </div>
                           </div>
                         )}
@@ -881,7 +846,7 @@ export default function DailyTaskChecklist() {
         <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 bg-black/30 z-40" />
-            <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-8 rounded-2xl z-50 max-w-2xl w-full shadow-2xl border border-gray-200">
+            <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-8 rounded-2xl z-50 max-w-2xl w-full shadow-2xl border border-gray-200 max-h-[90vh] overflow-y-auto pb-24 md:pb-8">
               <Dialog.Title className="text-2xl font-bold mb-6">Edit Task Completion</Dialog.Title>
               <form
                 onSubmit={async e => {
