@@ -22,6 +22,7 @@ type DailyTask = {
   completed: boolean;
   completed_at?: string;
   completed_by?: string;
+  completed_by_id?: string;
   notes?: string;
 };
 
@@ -50,6 +51,10 @@ export default function DailyTaskChecklist() {
   const [view, setView] = useState<'pet' | 'activity' | 'log'>('pet');
   const [isProcessing, setIsProcessing] = useState(false);
   const [instructionsModal, setInstructionsModal] = useState<{ open: boolean; text: string }>({ open: false, text: "" });
+  const [editNotes, setEditNotes] = useState<string>("");
+  const [editDateTime, setEditDateTime] = useState<string>("");
+  const [editCompletedBy, setEditCompletedBy] = useState<string>("");
+  const [userIdToName, setUserIdToName] = useState<Record<string, string>>({});
 
   // Load today's task completion status
   useEffect(() => {
@@ -125,10 +130,11 @@ export default function DailyTaskChecklist() {
         .from('users')
         .select('id, name, email')
         .in('id', allUserIds);
-      const userIdToName: Record<string, string> = {};
-      (usersData || []).forEach(u => {
-        userIdToName[u.id] = u.name || u.email?.split('@')[0] || u.id;
+      const userIdToNameMap: Record<string, string> = {};
+      (usersData || []).forEach((u: any) => {
+        userIdToNameMap[u.id] = u.name || u.email?.split('@')[0] || u.id;
       });
+      setUserIdToName(userIdToNameMap);
 
       // Create daily task list from pet tasks with completion status
       console.log("Creating daily task list from pet tasks:", petTasks);
@@ -141,10 +147,11 @@ export default function DailyTaskChecklist() {
         );
         
         // Get the actual user who completed the task, or fall back to current user
-        let completedBy = completedTask?.user_id ? userIdToName[completedTask.user_id] : userData?.name || user?.email;
+        let completedBy = completedTask?.user_id ? userIdToNameMap[completedTask.user_id] : userData?.name || user?.email;
+        let completedById = completedTask?.user_id || "";
         
         // Get the assigned user's name
-        let assignedUserName = petTask.assigned_user_id ? userIdToName[petTask.assigned_user_id] : "";
+        let assignedUserName = petTask.assigned_user_id ? userIdToNameMap[petTask.assigned_user_id] : "";
         
         console.log(`Task ${petTask.task_name} for pet ${petTask.pet_name} completed by:`, completedBy, "assigned to:", assignedUserName);
         return {
@@ -161,6 +168,7 @@ export default function DailyTaskChecklist() {
           completed: !!completedTask,
           completed_at: completedTask?.date_time,
           completed_by: completedBy,
+          completed_by_id: completedById,
           notes: completedTask?.notes
         };
       });
@@ -193,7 +201,30 @@ export default function DailyTaskChecklist() {
     setModalData(null);
   }, [view]);
 
+  useEffect(() => {
+    if (!instructionsModal.open) return;
+    // If the modal is open, check if the task is now completed
+    const task = dailyTasks.find(
+      t => t.instructions === instructionsModal.text
+    );
+    if (task && task.completed) {
+      setInstructionsModal({ open: false, text: "" });
+    }
+  }, [instructionsModal, dailyTasks]);
+
+  // When modalData changes (modal opens), initialize local state for editing
+  useEffect(() => {
+    if (modalOpen && modalData) {
+      setEditNotes(modalData.notes || "");
+      setEditDateTime(modalData.dateTime || "");
+      // Prefer completed_by_id if present, else fallback to modalData.userId
+      setEditCompletedBy((modalData as any).completed_by_id || modalData.userId || "");
+    }
+  }, [modalOpen, modalData]);
+
   const handleTaskClick = (task: DailyTask) => {
+    // Always close the info modal when opening the completed-task modal
+    setInstructionsModal({ open: false, text: "" });
     console.log('handleTaskClick called for task:', task);
     setModalData({
       petTaskId: task.id,
@@ -204,12 +235,12 @@ export default function DailyTaskChecklist() {
       instructions: task.instructions,
       notes: task.notes || "",
       dateTime: task.completed ? new Date(task.completed_at!).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16),
-      userId: task.completed ? task.assigned_user_id || user?.id || "" : user?.id || ""
+      userId: task.completed ? task.completed_by_id || user?.id || "" : user?.id || ""
     });
     setModalOpen(true);
   };
 
-  const handleCompleteTask = async () => {
+  const handleCompleteTask = async (notes: string, dateTime: string, userId: string) => {
     console.log("handleCompleteTask called with modalData:", modalData);
     if (!modalData || !user) {
       console.log("No modalData or user, returning");
@@ -236,12 +267,13 @@ export default function DailyTaskChecklist() {
               .from("task_logs")
               .update({
                 pet_id: modalData.petId,
-                user_id: modalData.userId,
-                date_time: new Date(modalData.dateTime).toISOString(),
-                notes: modalData.notes || null
+                user_id: userId,
+                date_time: new Date(dateTime).toISOString(),
+                notes: notes || null
               })
               .eq("task_id", modalData.taskId)
               .eq("pet_id", existingTask.pet_id)
+              .eq("user_id", (existingTask as any).completed_by_id || userId)
               .gte("date_time", new Date().toISOString().split('T')[0] + 'T00:00:00')
               .lt("date_time", new Date().toISOString().split('T')[0] + 'T23:59:59');
 
@@ -255,11 +287,11 @@ export default function DailyTaskChecklist() {
                 task.id === modalData.petTaskId
                   ? { 
                       ...task, 
-                      completed_at: new Date(modalData.dateTime).toISOString(),
-                      completed_by: userName || user?.email,
+                      completed_at: new Date(dateTime).toISOString(),
+                      completed_by: userIdToName[userId] || userName || user?.email,
                       pet_id: modalData.petId,
                       pet_name: modalData.petName,
-                      notes: modalData.notes
+                      notes: notes
                     }
                   : task
               ));
@@ -272,9 +304,9 @@ export default function DailyTaskChecklist() {
               .insert([{
                 task_id: modalData.taskId,
                 pet_id: modalData.petId,
-                user_id: modalData.userId,
-                date_time: new Date(modalData.dateTime).toISOString(),
-                notes: modalData.notes || null
+                user_id: userId,
+                date_time: new Date(dateTime).toISOString(),
+                notes: notes || null
               }]);
 
             if (error) {
@@ -288,11 +320,11 @@ export default function DailyTaskChecklist() {
                   ? { 
                       ...task, 
                       completed: true, 
-                      completed_at: new Date(modalData.dateTime).toISOString(),
-                      completed_by: userName || user?.email,
+                      completed_at: new Date(dateTime).toISOString(),
+                      completed_by: userIdToName[userId] || userName || user?.email,
                       pet_id: modalData.petId,
                       pet_name: modalData.petName,
-                      notes: modalData.notes
+                      notes: notes
                     }
                   : task
               ));
@@ -583,72 +615,75 @@ export default function DailyTaskChecklist() {
                                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleTaskClick(task); }}
                                 >
                                   {task.completed ? (
-                                    <>
-                                      <div className="flex items-center gap-2 mb-1">
-                                        <span className="text-green-600">✓</span>
-                                        <span className="strikethrough-group">
-                                          <span className="font-medium text-sm text-gray-400">
-                                            {task.expected_time ? task.expected_time.substring(0, 5) : ''}
-                                          </span>
-                                          {task.assigned_user_name && (
-                                            <span className="text-xs text-gray-500 ml-1">({task.assigned_user_name})</span>
-                                          )}
-                                        </span>
-                                      </div>
-                                      <div className="text-xs text-gray-400" title="Click to edit completion details">
-                                        {task.completed_by} @ {task.completed_at ? new Date(task.completed_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
-                                      </div>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <div className="flex items-center gap-2 mb-1">
-                                        <span className="font-medium text-sm text-black">
+                                    // Completed task layout
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="text-green-600">✓</span>
+                                      <span className="strikethrough-group">
+                                        <span className="font-medium text-sm text-gray-400">
                                           {task.expected_time ? task.expected_time.substring(0, 5) : ''}
                                         </span>
                                         {task.assigned_user_name && (
                                           <span className="text-xs text-gray-500 ml-1">({task.assigned_user_name})</span>
                                         )}
-                                        {task.instructions && (
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="font-medium text-sm text-black">
+                                        {task.expected_time ? task.expected_time.substring(0, 5) : ''}
+                                      </span>
+                                      {task.assigned_user_name && (
+                                        <span className="text-xs text-gray-500 ml-1">({task.assigned_user_name})</span>
+                                      )}
+                                      {!task.completed && task.instructions && (
+                                        <div className="relative group inline-block ml-1">
                                           <button
-                                            className="text-xs text-gray-400 hover:text-gray-600 underline"
-                                            onClick={e => { e.stopPropagation(); setInstructionsModal({ open: true, text: task.instructions }); }}
-                                            title="Instructions/Notes"
+                                            className="text-gray-400 hover:text-gray-600 p-0.5"
+                                            onClick={e => { e.stopPropagation(); setInstructionsModal({ open: true, text: task.instructions || '' }); }}
+                                            title="View info"
                                             type="button"
                                           >
-                                            (Instructions)
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                              <circle cx="12" cy="12" r="10" strokeWidth="2" />
+                                              <line x1="12" y1="16" x2="12" y2="12" strokeWidth="2" />
+                                              <circle cx="12" cy="8" r="1" />
+                                            </svg>
                                           </button>
-                                        )}
-                                      </div>
-                                      <div className="flex items-center gap-2 text-sm font-medium">
-                                        <span
-                                          className="text-blue-600 cursor-pointer"
-                                          style={{ marginRight: 4 }}
-                                          onClick={e => { e.stopPropagation(); handleTaskClick(task); }}
-                                        >
-                                          Click to complete
-                                        </span>
-                                        <button
-                                          onClick={async (e) => { 
-                                            e.stopPropagation();
-                                            if (isProcessing) return;
-                                            console.log("Lightning bolt clicked for task:", task);
-                                            setIsProcessing(true);
-                                            try {
-                                              await handleQuickComplete(task);
-                                            } finally {
-                                              setIsProcessing(false);
-                                            }
-                                          }}
-                                          disabled={isProcessing}
-                                          className="text-gray-400 hover:text-green-600 transition-colors text-lg disabled:opacity-50"
-                                          title="Quick complete"
-                                          type="button"
-                                        >
-                                          ⚡
-                                        </button>
-                                      </div>
-                                    </>
+                                          <div className="absolute left-1/2 -translate-x-1/2 mt-2 z-50 hidden group-hover:block bg-white text-gray-800 text-sm rounded-lg px-4 py-3 whitespace-pre-line max-w-xs border border-gray-200 shadow-lg">
+                                            {task.instructions}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
                                   )}
+                                  <div className="flex items-center gap-2 text-sm font-medium">
+                                    <span
+                                      className="text-blue-600 cursor-pointer"
+                                      style={{ marginRight: 4 }}
+                                      onClick={e => { e.stopPropagation(); handleTaskClick(task); }}
+                                    >
+                                      Click to complete
+                                    </span>
+                                    <button
+                                      onClick={async (e) => { 
+                                        e.stopPropagation();
+                                        if (isProcessing) return;
+                                        console.log("Lightning bolt clicked for task:", task);
+                                        setIsProcessing(true);
+                                        try {
+                                          await handleQuickComplete(task);
+                                        } finally {
+                                          setIsProcessing(false);
+                                        }
+                                      }}
+                                      disabled={isProcessing}
+                                      className="text-gray-400 hover:text-green-600 transition-colors text-lg disabled:opacity-50"
+                                      title="Quick complete"
+                                      type="button"
+                                    >
+                                      ⚡
+                                    </button>
+                                  </div>
                                 </div>
                               </td>
                             );
@@ -703,18 +738,26 @@ export default function DailyTaskChecklist() {
                           <div className="space-y-1">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
-                                <span className="text-red-600">○</span>
+                                <button
+                                  className="w-5 h-5 border-2 border-gray-500 rounded-none bg-white flex items-center justify-center mr-3 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                  onClick={e => { e.stopPropagation(); handleQuickComplete(task); }}
+                                  aria-label="Mark task as complete"
+                                />
                                 <span className="font-medium text-black">{pet.name}</span>
-                                {task.instructions && (
+                                {!task.completed && task.instructions && (
                                   <button
-                                    className="text-xs text-gray-400 hover:text-gray-600 underline"
+                                    className="ml-1 text-gray-400 hover:text-gray-600 p-0.5"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setInstructionsModal({ open: true, text: task.instructions });
                                     }}
                                     title="Instructions/Notes"
                                   >
-                                    (Instructions)
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <circle cx="12" cy="12" r="10" strokeWidth="2" />
+                                      <line x1="12" y1="16" x2="12" y2="12" strokeWidth="2" />
+                                      <circle cx="12" cy="8" r="1" />
+                                    </svg>
                                   </button>
                                 )}
                               </div>
@@ -765,84 +808,68 @@ export default function DailyTaskChecklist() {
               <h3 className="font-semibold text-lg mb-3">{petName}</h3>
               <div className="space-y-1">
                 {petTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className={`p-2 border rounded-lg ${
-                      task.completed 
-                        ? 'bg-gray-200 border-gray-400' 
-                        : 'bg-white border-gray-300 hover:border-gray-400 cursor-pointer'
-                    }`}
-                    onClick={() => handleTaskClick(task)}
-                  >
-                    {task.completed ? (
-                      // Completed task layout
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="text-green-600">✓</span>
-                            <span className="font-medium text-gray-400 line-through">{task.name}</span>
-                          </div>
-                          <div 
-                            className="text-sm text-gray-400 cursor-pointer hover:text-blue-600 transition-colors"
-                            onClick={() => handleTaskClick(task)}
-                            title="Click to edit completion details"
-                          >
-                            {task.completed_by} @ {new Date(task.completed_at!).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                          </div>
+                  task.completed ? (
+                    <div
+                      key={task.id}
+                      className="p-2 border rounded-lg bg-gray-200 border-gray-400"
+                    >
+                      <div
+                        className="flex items-center justify-between border-b last:border-b-0 px-4 py-2 bg-gray-200 border-gray-400 rounded-lg cursor-pointer"
+                        onClick={() => handleTaskClick(task)}
+                        title="Click to edit completion details"
+                        tabIndex={0}
+                        role="button"
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleTaskClick(task); }}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-green-600">✓</span>
+                          <span className="font-medium text-gray-400 line-through truncate">{task.name}</span>
+                        </div>
+                        <div className="text-sm text-gray-400 text-right min-w-[90px] pr-2 hover:text-blue-600 transition-colors">
+                          {task.completed_by} @ {new Date(task.completed_at!).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                         </div>
                       </div>
-                    ) : (
-                      // Pending task layout
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="text-red-600">○</span>
-                            <span className="font-medium text-black">{task.name}</span>
-                            {task.instructions && (
+                    </div>
+                  ) : (
+                    <div
+                      key={task.id}
+                      className={`p-2 border rounded-lg bg-white border-gray-300 hover:border-gray-400`}
+                    >
+                      {/* Pending task layout */}
+                      <div className="flex items-center justify-between border-b last:border-b-0 px-4 py-2 bg-white hover:bg-gray-50 transition">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <button
+                            className="w-5 h-5 border-2 border-gray-500 rounded-none bg-white flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-gray-400"
+                            onClick={e => { e.stopPropagation(); handleQuickComplete(task); }}
+                            aria-label="Mark task as complete"
+                          />
+                          <span className="font-medium text-black truncate">{task.name}</span>
+                          {!task.completed && task.instructions && (
+                            <div className="relative group">
                               <button
-                                className="text-xs text-gray-400 hover:text-gray-600 underline"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setInstructionsModal({ open: true, text: task.instructions });
-                                }}
-                                title="Instructions/Notes"
+                                className="text-gray-400 hover:text-gray-600 p-0"
+                                onClick={e => { e.stopPropagation(); setInstructionsModal({ open: true, text: task.instructions || '' }); }}
+                                type="button"
                               >
-                                (Instructions)
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <circle cx="12" cy="12" r="10" strokeWidth="2" />
+                                  <line x1="12" y1="16" x2="12" y2="12" strokeWidth="2" />
+                                  <circle cx="12" cy="8" r="1" />
+                                </svg>
                               </button>
-                            )}
-                          </div>
-                          <span className="text-sm text-gray-500">
-                            {task.assigned_user_name || "Unassigned"} • {task.expected_time ? task.expected_time.substring(0, 5) : "No time set"}
-                          </span>
+                              <div className="absolute left-0 mt-2 z-50 hidden group-hover:block bg-white text-gray-800 text-sm rounded-lg px-4 py-3 whitespace-pre-line max-w-[320px] border border-gray-200 shadow-lg">
+                                <div className="absolute -top-2 left-4 w-3 h-3 bg-white border border-gray-200 rotate-45 shadow"></div>
+                                {task.instructions}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div className="text-right -mt-1">
-                          <div className="flex items-center justify-end gap-2">
-                            <span className="text-sm text-blue-600 font-medium">
-                              Click to complete
-                            </span>
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                if (isProcessing) return;
-                                console.log("Mobile lightning bolt clicked for task:", task);
-                                setIsProcessing(true);
-                                try {
-                                  await handleQuickComplete(task);
-                                } finally {
-                                  setIsProcessing(false);
-                                }
-                              }}
-                              disabled={isProcessing}
-                              className="text-gray-400 hover:text-green-600 transition-colors disabled:opacity-50"
-                              title="Quick complete (no notes)"
-                            >
-                              ⚡
-                            </button>
-                          </div>
+                        <div className="text-sm text-gray-500 text-right min-w-[90px] pr-2">
+                          {task.assigned_user_name || 'Unassigned'} • {task.expected_time ? task.expected_time.substring(0, 5) : 'No time set'}
                         </div>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )
                 ))}
               </div>
             </div>
@@ -854,151 +881,115 @@ export default function DailyTaskChecklist() {
         <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 bg-black/30 z-40" />
-            <Dialog.Content className="fixed bottom-0 left-0 right-0 bg-white p-6 rounded-t-2xl z-50 max-h-[80vh] overflow-y-auto pb-24 sm:pb-8">
-              <Dialog.Title className="text-lg font-bold mb-4">
-                {modalData && dailyTasks.find(task => task.id === modalData.petTaskId)?.completed 
-                  ? "Edit Task Completion" 
-                  : "Complete Task"
-                }
-              </Dialog.Title>
-              {modalData && (
-                <div className="space-y-4">
+            <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-8 rounded-2xl z-50 max-w-2xl w-full shadow-2xl border border-gray-200">
+              <Dialog.Title className="text-2xl font-bold mb-6">Edit Task Completion</Dialog.Title>
+              <form
+                onSubmit={async e => {
+                  e.preventDefault();
+                  try {
+                    await handleCompleteTask(editNotes, editDateTime, editCompletedBy);
+                  } catch (err) {
+                    console.error('Error in handleCompleteTask:', err);
+                    alert('Failed to update task. Please try again.');
+                  }
+                }}
+              >
+                <div className="grid grid-cols-1 gap-4 mb-8">
                   <div>
-                    <label className="block text-sm font-medium mb-1">Task</label>
-                    <div className="p-2 bg-gray-50 rounded border">
-                      {modalData.taskName}
-                    </div>
+                    <label className="block font-semibold mb-1">Task</label>
+                    <input type="text" className="w-full border rounded px-3 py-2 bg-gray-50" value={modalData.taskName} disabled />
                   </div>
-
-                  {modalData.instructions && (
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Instructions</label>
-                      <div className="p-2 bg-gray-50 rounded border text-sm text-gray-600 italic">
-                        "{modalData.instructions}"
-                      </div>
-                    </div>
-                  )}
-
                   <div>
-                    <label className="block text-sm font-medium mb-1">Pet</label>
+                    <label className="block font-semibold mb-1">Instructions</label>
+                    <input type="text" className="w-full border rounded px-3 py-2 bg-gray-50 italic" value={modalData.instructions || ''} disabled />
+                  </div>
+                  <div>
+                    <label className="block font-semibold mb-1">Pet</label>
+                    <input type="text" className="w-full border rounded px-3 py-2 bg-gray-50" value={modalData.petName} disabled />
+                  </div>
+                  <div>
+                    <label className="block font-semibold mb-1">Completed By</label>
+                    {Object.keys(userIdToName).length === 0 ? (
+                      <div className="text-gray-400">Loading users...</div>
+                    ) : (
                     <select
-                      className="w-full border rounded p-2"
-                      value={modalData.petId}
-                      onChange={(e) => setModalData({...modalData, petId: e.target.value})}
+                      className="w-full border rounded px-3 py-2 bg-white"
+                      value={editCompletedBy}
+                      onChange={e => setEditCompletedBy(e.target.value)}
                     >
-                      {pets.map((pet) => (
-                        <option key={pet.id} value={pet.id}>
-                          {pet.name}
-                        </option>
+                      {Object.entries(userIdToName).map(([id, name]) => (
+                        <option key={id} value={id}>{name}</option>
                       ))}
                     </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Completed By</label>
-                    <select
-                      className="w-full border rounded p-2"
-                      value={modalData.userId}
-                      onChange={(e) => setModalData({...modalData, userId: e.target.value})}
-                    >
-                      <option value={user?.id}>{userName}</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Date & Time</label>
-                    <input
-                      type="datetime-local"
-                      className="w-full border rounded p-2"
-                      value={modalData.dateTime}
-                      onChange={(e) => setModalData({...modalData, dateTime: e.target.value})}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Notes</label>
-                    <textarea
-                      className="w-full border rounded p-2"
-                      value={modalData.notes}
-                      onChange={(e) => setModalData({...modalData, notes: e.target.value})}
-                      placeholder="Add any notes about this task..."
-                    />
-                  </div>
-
-                  <div className="flex gap-3 pt-4 pb-8 items-stretch">
-                    <button
-                      onClick={() => setModalOpen(false)}
-                      className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium"
-                    >
-                      Cancel
-                    </button>
-                    {modalData && dailyTasks.find(task => task.id === modalData.petTaskId)?.completed ? (
-                      <>
-                        <button
-                          onClick={async () => {
-                            if (isProcessing) return;
-                            console.log("Update Task button clicked");
-                            setIsProcessing(true);
-                            try {
-                              await handleCompleteTask();
-                              setModalOpen(false);
-                            } finally {
-                              setIsProcessing(false);
-                            }
-                          }}
-                          disabled={isProcessing}
-                          className="flex-1 px-4 py-3 bg-black text-white rounded-lg text-sm font-medium disabled:opacity-50"
-                        >
-                          Update
-                        </button>
-                        <button
-                          onClick={async () => {
-                            if (isProcessing) return;
-                            console.log("Uncomplete button clicked");
-                            setIsProcessing(true);
-                            const task = dailyTasks.find(t => t.id === modalData.petTaskId);
-                            console.log("Found task for uncomplete:", task);
-                            if (task) {
-                              try {
-                                // Don't close modal immediately on mobile - wait for operation to complete
-                                await handleUndoComplete(task);
-                                setModalOpen(false);
-                              } finally {
-                                setIsProcessing(false);
-                              }
-                            } else {
-                              console.error("Task not found for uncomplete");
-                              setIsProcessing(false);
-                            }
-                          }}
-                          disabled={isProcessing}
-                          className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
-                        >
-                          Uncomplete
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        onClick={async () => {
-                          if (isProcessing) return;
-                          console.log("Complete Task button clicked");
-                          setIsProcessing(true);
-                          try {
-                            await handleCompleteTask();
-                            setModalOpen(false);
-                          } finally {
-                            setIsProcessing(false);
-                          }
-                        }}
-                        disabled={isProcessing}
-                        className="flex-1 px-4 py-3 bg-black text-white rounded-lg text-sm font-medium disabled:opacity-50"
-                      >
-                        Complete Task
-                      </button>
                     )}
                   </div>
+                  <div>
+                    <label className="block font-semibold mb-1">Date & Time</label>
+                    <input
+                      type="datetime-local"
+                      className="w-full border rounded px-3 py-2"
+                      value={editDateTime}
+                      onChange={e => setEditDateTime(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold mb-1">Notes</label>
+                    <textarea
+                      className="w-full border rounded px-3 py-2"
+                      rows={3}
+                      value={editNotes}
+                      onChange={e => setEditNotes(e.target.value)}
+                      placeholder="Add notes..."
+                    />
+                  </div>
                 </div>
-              )}
+                <div className="flex flex-col md:flex-row gap-4 mt-8">
+                  <button
+                    type="button"
+                    className="flex-1 py-3 rounded-lg border border-gray-300 text-lg font-semibold hover:bg-gray-100"
+                    onClick={() => setModalOpen(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-3 rounded-lg bg-black text-white text-lg font-semibold hover:bg-gray-900"
+                  >
+                    Update
+                  </button>
+                  <button
+                    type="button"
+                    className="flex-1 py-3 rounded-lg bg-red-600 text-white text-lg font-semibold hover:bg-red-700"
+                    onClick={async () => {
+                      try {
+                        await handleUndoComplete({
+                          id: modalData.petTaskId,
+                          task_id: modalData.taskId,
+                          name: modalData.taskName,
+                          pet_id: modalData.petId,
+                          pet_name: modalData.petName,
+                          assigned_user_id: editCompletedBy,
+                          assigned_user_name: '',
+                          expected_time: '',
+                          frequency: '',
+                          instructions: modalData.instructions,
+                          completed: true,
+                          completed_at: modalData.dateTime,
+                          completed_by: '',
+                          notes: editNotes,
+                        });
+                        setModalOpen(false);
+                      } catch (err) {
+                        console.error('Error in handleUndoComplete:', err);
+                        alert('Failed to uncomplete task. Please try again.');
+                      }
+                    }}
+                  >
+                    Uncomplete
+                  </button>
+                </div>
+              </form>
             </Dialog.Content>
           </Dialog.Portal>
         </Dialog.Root>
@@ -1008,11 +999,17 @@ export default function DailyTaskChecklist() {
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/30 z-40" />
           <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-2xl z-50 max-w-sm w-full shadow-lg">
-            <Dialog.Title className="text-lg font-bold mb-4">Instructions/Notes</Dialog.Title>
+            <button
+              onClick={() => setInstructionsModal({ open: false, text: "" })}
+              aria-label="Close"
+              className="absolute top-3 right-3 text-gray-400 hover:text-black focus:outline-none"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <Dialog.Title className="text-lg font-bold mb-4">Info</Dialog.Title>
             <div className="text-gray-700 whitespace-pre-line mb-6">{instructionsModal.text}</div>
-            <Dialog.Close asChild>
-              <button className="w-full py-2 px-4 bg-black text-white rounded-lg font-medium">Close</button>
-            </Dialog.Close>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
