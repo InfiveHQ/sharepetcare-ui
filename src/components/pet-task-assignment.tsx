@@ -63,6 +63,7 @@ export default function PetTaskAssignment({ pets, tasks }: PetTaskAssignmentProp
       try {
         const usersByPet: { [petId: string]: { id: string; name: string; email: string }[] } = {};
         const permissions: { [petId: string]: 'owner' | 'view_only' | 'view_and_log' | 'full_access' | null } = {};
+        const allUserIds = new Set<string>();
         
         for (const pet of pets) {
           const petUsers: { id: string; name: string; email: string }[] = [];
@@ -90,50 +91,53 @@ export default function PetTaskAssignment({ pets, tasks }: PetTaskAssignmentProp
             .eq('id', pet.id)
             .single();
           if (petData?.owner_id) {
-            const { data: ownerData } = await supabase
-              .from('users')
-              .select('id, name, email')
-              .eq('id', petData.owner_id)
-              .single();
-            if (ownerData) {
-              petUsers.push({
-                id: ownerData.id,
-                name: ownerData.name || ownerData.email?.split('@')[0] || 'Unknown',
-                email: ownerData.email
-              });
-            }
+            allUserIds.add(petData.owner_id);
           }
           // 2. Get all users who have access to this pet (shared)
           const { data: sharedUsers } = await supabase
             .from('pet_shares')
             .select('shared_with_email')
             .eq('pet_id', pet.id);
-          if (sharedUsers) {
-            for (const share of sharedUsers) {
-              const { data: userData } = await supabase
-                .from('users')
-                .select('id, name, email')
-                .eq('email', share.shared_with_email)
-                .single();
-              if (userData && !petUsers.find(u => u.id === userData.id)) {
-                petUsers.push({
-                  id: userData.id,
-                  name: userData.name || userData.email?.split('@')[0] || 'Unknown',
-                  email: userData.email
-                });
-              }
-            }
+          (sharedUsers || []).forEach(su => {
+            allUserIds.add(su.shared_with_email);
+          });
+        }
+        // Fetch all user records in one query
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('id, name, email')
+          .in('id', Array.from(allUserIds));
+        const userIdToName: Record<string, string> = {};
+        (usersData || []).forEach(u => {
+          userIdToName[u.id] = u.name || u.email?.split('@')[0] || u.id;
+        });
+        // Now, for each pet, build the available users list with names
+        for (const pet of pets) {
+          const petUsers: { id: string; name: string; email: string }[] = [];
+          // Owner
+          if (pet.owner_id && userIdToName[pet.owner_id]) {
+            petUsers.push({ id: pet.owner_id, name: userIdToName[pet.owner_id], email: usersData.find(u => u.id === pet.owner_id)?.email || '' });
           }
+          // Shared users
+          const { data: sharedUsers } = await supabase
+            .from('pet_shares')
+            .select('shared_with_email')
+            .eq('pet_id', pet.id);
+          (sharedUsers || []).forEach(su => {
+            const id = su.shared_with_email;
+            if (userIdToName[id]) {
+              petUsers.push({ id, name: userIdToName[id], email: usersData.find(u => u.id === id)?.email || '' });
+            }
+          });
           usersByPet[pet.id] = petUsers;
         }
-        
         setAvailableUsers(usersByPet);
         setUserPermissions(permissions);
-        console.log("PetTaskAssignment: User permissions:", permissions);
-      } catch (error) {
-        console.error("Error loading available users:", error);
+      } catch (err) {
+        console.error("Failed to load available users for pet task assignment:", err);
       }
     };
+
     loadAvailableUsers();
   }, [pets, user]);
 

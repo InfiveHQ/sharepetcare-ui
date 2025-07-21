@@ -49,6 +49,7 @@ export default function DailyTaskChecklist() {
   const [userName, setUserName] = useState<string>("");
   const [view, setView] = useState<'pet' | 'activity' | 'log'>('pet');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [instructionsModal, setInstructionsModal] = useState<{ open: boolean; text: string }>({ open: false, text: "" });
 
   // Load today's task completion status
   useEffect(() => {
@@ -76,7 +77,7 @@ export default function DailyTaskChecklist() {
       // Get current user's name - create user record if it doesn't exist
       let { data: userData } = await supabase
         .from('users')
-        .select('name')
+        .select('id, name, email')
         .eq('id', user.id)
         .single();
 
@@ -90,7 +91,7 @@ export default function DailyTaskChecklist() {
             email: user.email,
             name: user.user_metadata?.name || user.email?.split('@')[0] || 'User'
           }])
-          .select('name')
+          .select('id, name, email')
           .single();
         
         if (!createError && newUserData) {
@@ -114,6 +115,21 @@ export default function DailyTaskChecklist() {
         .gte("date_time", today.toISOString())
         .lt("date_time", tomorrow.toISOString());
 
+      // Collect all user IDs to fetch names for
+      const assignedUserIds = petTasks.map(pt => pt.assigned_user_id).filter(Boolean);
+      const completedUserIds = completedTasks?.map(ct => ct.user_id).filter(Boolean) || [];
+      const allUserIds = Array.from(new Set([user.id, ...assignedUserIds, ...completedUserIds]));
+
+      // Fetch all user names in one query
+      const { data: usersData } = await supabase
+        .from('users')
+        .select('id, name, email')
+        .in('id', allUserIds);
+      const userIdToName: Record<string, string> = {};
+      (usersData || []).forEach(u => {
+        userIdToName[u.id] = u.name || u.email?.split('@')[0] || u.id;
+      });
+
       // Create daily task list from pet tasks with completion status
       console.log("Creating daily task list from pet tasks:", petTasks);
       // Only include petTasks for pets the user has access to (owned, shared with, or shared by)
@@ -125,16 +141,12 @@ export default function DailyTaskChecklist() {
         );
         
         // Get the actual user who completed the task, or fall back to current user
-        let completedBy = userData?.name || user?.email;
-        if (completedTask?.user_id) {
-          // Try to get the name of the user who actually completed it
-          // For now, we'll use the user_id to determine if it was someone else
-          if (completedTask.user_id !== user?.id) {
-            completedBy = `User ${completedTask.user_id}`; // Placeholder - we could fetch user names if needed
-          }
-        }
+        let completedBy = completedTask?.user_id ? userIdToName[completedTask.user_id] : userData?.name || user?.email;
         
-        console.log(`Task ${petTask.task_name} for pet ${petTask.pet_name} completed by:`, completedBy);
+        // Get the assigned user's name
+        let assignedUserName = petTask.assigned_user_id ? userIdToName[petTask.assigned_user_id] : "";
+        
+        console.log(`Task ${petTask.task_name} for pet ${petTask.pet_name} completed by:`, completedBy, "assigned to:", assignedUserName);
         return {
           id: petTask.id,
           task_id: petTask.task_id, // Add the actual task_id
@@ -142,7 +154,7 @@ export default function DailyTaskChecklist() {
           pet_id: petTask.pet_id,
           pet_name: petTask.pet_name,
           assigned_user_id: petTask.assigned_user_id,
-          assigned_user_name: petTask.assigned_user_name,
+          assigned_user_name: assignedUserName,
           expected_time: petTask.expected_time,
           frequency: petTask.frequency,
           instructions: petTask.instructions,
@@ -216,85 +228,90 @@ export default function DailyTaskChecklist() {
       console.log("Existing task:", existingTask, "isEditing:", isEditing);
 
       const operationPromise = (async () => {
-        if (isEditing) {
-          console.log("Updating existing task log");
-          // Update existing task log
-          const { error } = await supabase
-            .from("task_logs")
-            .update({
-              pet_id: modalData.petId,
-              user_id: modalData.userId,
-              date_time: new Date(modalData.dateTime).toISOString(),
-              notes: modalData.notes || null
-            })
-            .eq("task_id", modalData.taskId)
-            .eq("pet_id", existingTask.pet_id)
-            .gte("date_time", new Date().toISOString().split('T')[0] + 'T00:00:00')
-            .lt("date_time", new Date().toISOString().split('T')[0] + 'T23:59:59');
+        try {
+          if (isEditing) {
+            console.log("Updating existing task log");
+            // Update existing task log
+            const { error } = await supabase
+              .from("task_logs")
+              .update({
+                pet_id: modalData.petId,
+                user_id: modalData.userId,
+                date_time: new Date(modalData.dateTime).toISOString(),
+                notes: modalData.notes || null
+              })
+              .eq("task_id", modalData.taskId)
+              .eq("pet_id", existingTask.pet_id)
+              .gte("date_time", new Date().toISOString().split('T')[0] + 'T00:00:00')
+              .lt("date_time", new Date().toISOString().split('T')[0] + 'T23:59:59');
 
-          if (error) {
-            console.error("Failed to update task:", error);
-            alert(`Failed to update task: ${error.message}`);
+            if (error) {
+              console.error("Failed to update task:", error);
+              alert(`Failed to update task: ${error.message}`);
+            } else {
+              console.log("Task updated successfully");
+              // Update local state
+              setDailyTasks(prev => prev.map(task => 
+                task.id === modalData.petTaskId
+                  ? { 
+                      ...task, 
+                      completed_at: new Date(modalData.dateTime).toISOString(),
+                      completed_by: userName || user?.email,
+                      pet_id: modalData.petId,
+                      pet_name: modalData.petName,
+                      notes: modalData.notes
+                    }
+                  : task
+              ));
+            }
           } else {
-            console.log("Task updated successfully");
-            // Update local state
-            setDailyTasks(prev => prev.map(task => 
-              task.id === modalData.petTaskId
-                ? { 
-                    ...task, 
-                    completed_at: new Date(modalData.dateTime).toISOString(),
-                    completed_by: userName || user?.email,
-                    pet_id: modalData.petId,
-                    pet_name: modalData.petName,
-                    notes: modalData.notes
-                  }
-                : task
-            ));
-          }
-        } else {
-          console.log("Creating new task log");
-          // Create new task log
-          const { error } = await supabase
-            .from("task_logs")
-            .insert([{
-              task_id: modalData.taskId,
-              pet_id: modalData.petId,
-              user_id: modalData.userId,
-              date_time: new Date(modalData.dateTime).toISOString(),
-              notes: modalData.notes || null
-            }]);
+            console.log("Creating new task log");
+            // Create new task log
+            const { error } = await supabase
+              .from("task_logs")
+              .insert([{
+                task_id: modalData.taskId,
+                pet_id: modalData.petId,
+                user_id: modalData.userId,
+                date_time: new Date(modalData.dateTime).toISOString(),
+                notes: modalData.notes || null
+              }]);
 
-          if (error) {
-            console.error("Failed to complete task:", error);
-            alert(`Failed to complete task: ${error.message}`);
-          } else {
-            console.log("Task completed successfully");
-            // Update local state
-            setDailyTasks(prev => prev.map(task => 
-              task.id === modalData.petTaskId
-                ? { 
-                    ...task, 
-                    completed: true, 
-                    completed_at: new Date(modalData.dateTime).toISOString(),
-                    completed_by: userName || user?.email,
-                    pet_id: modalData.petId,
-                    pet_name: modalData.petName,
-                    notes: modalData.notes
-                  }
-                : task
-            ));
+            if (error) {
+              console.error("Failed to complete task:", error);
+              alert(`Failed to complete task: ${error.message}`);
+            } else {
+              console.log("Task completed successfully");
+              // Update local state
+              setDailyTasks(prev => prev.map(task => 
+                task.id === modalData.petTaskId
+                  ? { 
+                      ...task, 
+                      completed: true, 
+                      completed_at: new Date(modalData.dateTime).toISOString(),
+                      completed_by: userName || user?.email,
+                      pet_id: modalData.petId,
+                      pet_name: modalData.petName,
+                      notes: modalData.notes
+                    }
+                  : task
+              ));
+            }
           }
+          console.log("About to close modal and clear modalData");
+          setModalOpen(false);
+          setModalData(null);
+          console.log("Modal closed and modalData cleared");
+        } catch (err) {
+          console.error("Error inside operationPromise:", err);
+          throw err;
         }
-
-        setModalOpen(false);
-        setModalData(null);
-        
-        // Don't trigger global refresh - local state update is sufficient
-        // triggerRefresh();
       })();
 
       // Race between the operation and timeout
+      console.log("Awaiting Promise.race between operationPromise and timeoutPromise");
       await Promise.race([operationPromise, timeoutPromise]);
+      console.log("Promise.race resolved");
     } catch (error) {
       console.error("Error completing task:", error);
       alert(`Error completing task: ${error}`);
@@ -594,7 +611,7 @@ export default function DailyTaskChecklist() {
                                         {task.instructions && (
                                           <button
                                             className="text-xs text-gray-400 hover:text-gray-600 underline"
-                                            onClick={e => { e.stopPropagation(); alert(task.instructions); }}
+                                            onClick={e => { e.stopPropagation(); setInstructionsModal({ open: true, text: task.instructions }); }}
                                             title={task.instructions}
                                             type="button"
                                           >
@@ -986,6 +1003,19 @@ export default function DailyTaskChecklist() {
           </Dialog.Portal>
         </Dialog.Root>
       )}
+      {/* Instructions Modal */}
+      <Dialog.Root open={instructionsModal.open} onOpenChange={open => setInstructionsModal(open ? instructionsModal : { open: false, text: "" })}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/30 z-40" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-2xl z-50 max-w-sm w-full shadow-lg">
+            <Dialog.Title className="text-lg font-bold mb-4">Instructions/Notes</Dialog.Title>
+            <div className="text-gray-700 whitespace-pre-line mb-6">{instructionsModal.text}</div>
+            <Dialog.Close asChild>
+              <button className="w-full py-2 px-4 bg-black text-white rounded-lg font-medium">Close</button>
+            </Dialog.Close>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 } 

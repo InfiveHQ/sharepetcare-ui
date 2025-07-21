@@ -902,7 +902,7 @@ export default function ProfilePage() {
               size="lg"
               className="w-full mb-4"
             >
-              {loading ? "Saving..." : (hasProfileChanges ? "Save Profile and Return to Dashboard" : "Save Pet/Task Changes and Return to Dashboard")}
+              {loading ? "Saving..." : "Save and Return to Dashboard"}
             </Button>
           </div>
         </div>

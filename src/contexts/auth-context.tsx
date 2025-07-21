@@ -119,22 +119,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       userRecord,
       signOut: async () => {
-        console.log("Sign out initiated");
+        console.log("Force sign out initiated");
         try {
-          // Clear all state first
+          // Clear all local/session storage
+          localStorage.clear();
+          sessionStorage.clear();
+          console.log("Local and session storage cleared");
+
+          // Clear all state
           setUser(null);
           setSession(null);
           setUserRecord(null);
           setLoading(false);
-          
-          // Then sign out from Supabase
+          console.log("Auth state cleared");
+
+          // Sign out from Supabase
           await supabase.auth.signOut();
-          console.log("Sign out successful");
-          
+          console.log("Supabase signOut called");
+
           // Force redirect
           window.location.href = '/';
         } catch (error) {
-          console.error("Sign out error:", error);
+          console.error("Force sign out error:", error);
           // Force sign out anyway
           setUser(null);
           setSession(null);
