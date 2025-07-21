@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 console.log("Supabase utils: Starting initialization");
 
@@ -21,7 +21,7 @@ if (!url || !key) {
   throw new Error("Supabase environment variables are missing");
 }
 
-let supabase;
+let supabase: SupabaseClient;
 try {
   console.log("Supabase utils: Creating client...");
   supabase = createClient(url, key);

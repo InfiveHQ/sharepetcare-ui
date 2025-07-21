@@ -5,7 +5,8 @@ import { useAuth } from "@/contexts/auth-context";
 import { useData } from "@/contexts/data-context";
 import { usePetTasks, PetTask } from "@/hooks/usePetTasks";
 import { supabase } from "@/utils/supabase";
-import PetTaskAssignment from "@/components/pet-task-assignment";
+import PetTaskAssignment, { PetTaskAssignmentHandle } from "@/components/pet-task-assignment";
+import React, { useRef } from "react";
 import SharePetModal from "@/components/share-pet-modal";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -57,6 +58,8 @@ export default function ProfilePage() {
     frequency: "daily",
     instructions: ""
   });
+
+  const petTaskRef = useRef<PetTaskAssignmentHandle>(null);
 
   // Debug logging
   console.log("Profile page render:", {
@@ -215,22 +218,16 @@ export default function ProfilePage() {
   const handleSavePetTaskChanges = async () => {
     setLoading(true);
     setMessage(null);
-    
-    console.log("=== SAVE PET/TASK CHANGES STARTED ===");
-    console.log("Current pets:", pets);
-    console.log("Current tasks:", tasks);
-    
     try {
-      // Dispatch custom event for pet task assignment component
-      console.log("Dispatching dataRefreshed event...");
+      // Save all pet task assignment changes first
+      if (petTaskRef.current) {
+        await petTaskRef.current.saveAllAssignments();
+      }
+      // Dispatch custom event for pet task assignment component (if needed)
       window.dispatchEvent(new Event('dataRefreshed'));
-      
-      console.log("=== SAVE PET/TASK CHANGES COMPLETED ===");
       setMessage({ type: 'success', text: 'Pet and task changes saved successfully! Redirecting to dashboard...' });
       setHasPetTaskChanges(false);
       setHasUnsavedChanges(false);
-      
-      // Navigate back to dashboard after a short delay
       setTimeout(() => {
         window.location.href = '/';
       }, 1500);
@@ -877,6 +874,7 @@ export default function ProfilePage() {
             <div className="bg-white rounded-lg p-6 border">
               <h2 className="text-lg font-semibold mb-4">Pet Task Assignments</h2>
               <PetTaskAssignment 
+                ref={petTaskRef}
                 key={`${pets.length}-${tasks.length}`}
                 pets={pets}
                 tasks={tasks}
@@ -907,76 +905,6 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-// dnd-kit sortable TaskItem
-function SortableTaskItem({ id, task, onUpdate, onDelete }: { id: string; task: Task; onUpdate: (id: string, name: string) => void; onDelete: (id: string) => void; }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-  const [isEditing, setIsEditing] = useState(false);
-  const [name, setName] = useState(task.name);
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-    zIndex: isDragging ? 50 : undefined,
-    background: isDragging ? '#e0f2fe' : undefined,
-  };
-  const handleSave = () => {
-    if (name.trim()) {
-      onUpdate(task.id, name.trim());
-      setIsEditing(false);
-    }
-  };
-  const handleCancel = () => {
-    setName(task.name);
-    setIsEditing(false);
-  };
-  return (
-    <div ref={setNodeRef} style={style} {...attributes} className="flex items-center gap-2 p-3 border rounded-lg transition-all duration-200 bg-white">
-      <div {...listeners} className="text-gray-400 text-xs mr-2 select-none hover:text-gray-600 cursor-grab active:cursor-grabbing">⋮⋮</div>
-      {isEditing ? (
-        <>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="flex-1 border rounded px-2 py-1"
-            autoFocus
-          />
-          <button
-            onClick={handleSave}
-            className="text-green-600 hover:text-green-800 text-sm"
-          >
-            Save
-          </button>
-          <button
-            onClick={handleCancel}
-            className="text-gray-600 hover:text-gray-800 text-sm"
-          >
-            Cancel
-          </button>
-        </>
-      ) : (
-        <>
-          <span className="flex-1">{task.name}</span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setIsEditing(true)}
-              className="text-blue-600 hover:text-blue-800 text-sm"
-            >
-              Edit
-            </button>
-            <button
-              onClick={() => onDelete(task.id)}
-              className="text-red-600 hover:text-red-800 text-sm"
-            >
-              Delete
-            </button>
-          </div>
-        </>
-      )}
     </div>
   );
 }
@@ -1036,8 +964,63 @@ function AddTaskForm({ onAdd }: { onAdd: (name: string) => void }) {
   );
 }
 
+// Add Pet Form Component
+function AddPetForm({ onAdd }: { onAdd: (name: string) => void }) {
+  const [name, setName] = useState("");
+  const [isAdding, setIsAdding] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (name.trim()) {
+      onAdd(name.trim());
+      setName("");
+      setIsAdding(false);
+    }
+  };
+
+  if (!isAdding) {
+    return (
+      <button
+        onClick={() => setIsAdding(true)}
+        className="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-gray-400 hover:text-gray-600"
+      >
+        + Add Pet
+      </button>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex items-center gap-2 p-3 border rounded-lg">
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Pet name"
+        className="flex-1 border rounded px-2 py-1"
+        autoFocus
+      />
+      <button
+        type="submit"
+        className="text-green-600 hover:text-green-800 text-sm"
+      >
+        Add
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setName("");
+          setIsAdding(false);
+        }}
+        className="text-gray-600 hover:text-gray-800 text-sm"
+      >
+        Cancel
+      </button>
+    </form>
+  );
+}
+
 // Pet Item Component
-function PetItem({ pet, onUpdate, onDelete }: { pet: Pet; onUpdate: (id: string, name: string) => void; onDelete: (id: string) => void }) {
+function PetItem({ pet, onUpdate, onDelete }: { pet: any; onUpdate: (id: string, name: string) => void; onDelete: (id: string) => void }) {
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(pet.name);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -1129,7 +1112,6 @@ function PetItem({ pet, onUpdate, onDelete }: { pet: Pet; onUpdate: (id: string,
           </>
         )}
       </div>
-
       {/* Share Pet Modal */}
       {showShareModal && (
         <SharePetModal 
@@ -1141,65 +1123,72 @@ function PetItem({ pet, onUpdate, onDelete }: { pet: Pet; onUpdate: (id: string,
   );
 }
 
-// Add Pet Form Component
-function AddPetForm({ onAdd }: { onAdd: (name: string) => void }) {
-  const [name, setName] = useState("");
-  const [isAdding, setIsAdding] = useState(false);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+// Sortable Task Item Component
+function SortableTaskItem({ id, task, onUpdate, onDelete }: { id: string; task: any; onUpdate: (id: string, name: string) => void; onDelete: (id: string) => void; }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const [isEditing, setIsEditing] = useState(false);
+  const [name, setName] = useState(task.name);
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : undefined,
+    background: isDragging ? '#e0f2fe' : undefined,
+  };
+  const handleSave = () => {
     if (name.trim()) {
-      onAdd(name.trim());
-      setName("");
-      setIsAdding(false);
+      onUpdate(task.id, name.trim());
+      setIsEditing(false);
     }
   };
-
-  if (!isAdding) {
-    return (
-      <button
-        onClick={() => setIsAdding(true)}
-        className="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-gray-400 hover:text-gray-600"
-      >
-        + Add Pet
-      </button>
-    );
-  }
-
+  const handleCancel = () => {
+    setName(task.name);
+    setIsEditing(false);
+  };
   return (
-    <form onSubmit={handleSubmit} className="flex items-center gap-2 p-3 border rounded-lg">
-      <input
-        type="text"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Pet name"
-        className="flex-1 border rounded px-2 py-1"
-        autoFocus
-      />
-      <button
-        type="submit"
-        className="text-green-600 hover:text-green-800 text-sm"
-      >
-        Add
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          setName("");
-          setIsAdding(false);
-        }}
-        className="text-gray-600 hover:text-gray-800 text-sm"
-      >
-        Cancel
-      </button>
-    </form>
+    <div ref={setNodeRef} style={style} {...attributes} className="flex items-center gap-2 p-3 border rounded-lg transition-all duration-200 bg-white">
+      <div {...listeners} className="text-gray-400 text-xs mr-2 select-none hover:text-gray-600 cursor-grab active:cursor-grabbing">⋮⋮</div>
+      {isEditing ? (
+        <>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="flex-1 border rounded px-2 py-1"
+            autoFocus
+          />
+          <button
+            onClick={handleSave}
+            className="text-green-600 hover:text-green-800 text-sm"
+          >
+            Save
+          </button>
+          <button
+            onClick={handleCancel}
+            className="text-gray-600 hover:text-gray-800 text-sm"
+          >
+            Cancel
+          </button>
+        </>
+      ) : (
+        <>
+          <span className="flex-1">{task.name}</span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setIsEditing(true)}
+              className="text-blue-600 hover:text-blue-800 text-sm"
+            >
+              Edit
+            </button>
+            <button
+              onClick={() => onDelete(task.id)}
+              className="text-red-600 hover:text-red-800 text-sm"
+            >
+              Delete
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
-
-/*
-Note: You'll need to add RLS policies for the pets table in Supabase:
-1. Go to Authentication → Policies → pets table
-2. Add policy for SELECT: "Users can view all pets" (Operation: SELECT, Target: authenticated, Using: true)
-3. Add policy for INSERT: "Users can add pets" (Operation: INSERT, Target: authenticated, Using: true)
-4. Add policy for UPDATE: "Users can update pets" (Operation: UPDATE, Target: authenticated, Using: true)
-*/ 
