@@ -612,7 +612,7 @@ export default function DailyTaskChecklist() {
                                           <button
                                             className="text-xs text-gray-400 hover:text-gray-600 underline"
                                             onClick={e => { e.stopPropagation(); setInstructionsModal({ open: true, text: task.instructions }); }}
-                                            title={task.instructions}
+                                            title="Instructions/Notes"
                                             type="button"
                                           >
                                             (Instructions)
@@ -710,9 +710,9 @@ export default function DailyTaskChecklist() {
                                     className="text-xs text-gray-400 hover:text-gray-600 underline"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      alert(task.instructions);
+                                      setInstructionsModal({ open: true, text: task.instructions });
                                     }}
-                                    title={task.instructions}
+                                    title="Instructions/Notes"
                                   >
                                     (Instructions)
                                   </button>
@@ -803,9 +803,9 @@ export default function DailyTaskChecklist() {
                                 className="text-xs text-gray-400 hover:text-gray-600 underline"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  alert(task.instructions);
+                                  setInstructionsModal({ open: true, text: task.instructions });
                                 }}
-                                title={task.instructions}
+                                title="Instructions/Notes"
                               >
                                 (Instructions)
                               </button>
