@@ -50,26 +50,23 @@ export function usePetTasks() {
   const [petTasks, setPetTasks] = useState<PetTask[]>([]);
   const [loading, setLoading] = useState(true);
   const { refreshTrigger } = useData();
-  const { user } = useAuth();
+  const { user, userRecord } = useAuth();
 
   // Initialize with cached data if available
   useEffect(() => {
-    if (user?.id) {
+    if (user?.id && userRecord) {
       const cachedTasks = getCachedPetTasks(user.id);
       if (cachedTasks.length > 0) {
-        console.log("Loading cached pet tasks:", cachedTasks.length);
         setPetTasks(cachedTasks);
         petTasksCache = cachedTasks;
         cacheUser = user.id;
-        setLoading(false); // Set loading to false when using cached data
-      } else {
-        console.log("No cached pet tasks found for user:", user.id);
+        setLoading(false);
       }
     }
-  }, [user?.id]);
+  }, [user?.id, userRecord]);
 
   const fetchPetTasks = async () => {
-    if (!user) return;
+    if (!user || !userRecord) return;
 
     console.log("Fetching pet tasks for user:", user.id);
     
@@ -167,10 +164,10 @@ export function usePetTasks() {
       clearCachedPetTasks(user?.id || '');
     }
     
-    if (user) {
+    if (user && userRecord) {
       fetchPetTasks();
     }
-  }, [refreshTrigger, user]);
+  }, [refreshTrigger, user, userRecord]);
 
   const addPetTask = async (petTask: Omit<PetTask, 'id' | 'pet_name' | 'task_name' | 'assigned_user_name'>) => {
     if (!user) return;

@@ -608,11 +608,14 @@ export default function DailyTaskChecklist() {
                               <td key={pet.id} className="border border-gray-200 px-4 py-2 align-top min-w-[8rem] max-w-[8rem]">
                                 <div
                                   className={`rounded-lg p-2 w-full h-full ${task.completed ? 'bg-gray-200 border border-gray-400' : 'bg-white border-gray-300 hover:border-gray-400 cursor-pointer'}`}
-                                  onClick={() => handleTaskClick(task)}
+                                  onClick={() => {
+                                    if (!task.completed) handleQuickComplete(task);
+                                    else handleTaskClick(task);
+                                  }}
                                   style={{ minHeight: '48px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center' }}
                                   role="button"
                                   tabIndex={0}
-                                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleTaskClick(task); }}
+                                  onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && !task.completed) handleQuickComplete(task); else if ((e.key === 'Enter' || e.key === ' ') && task.completed) handleTaskClick(task); }}
                                 >
                                   <div className="flex items-center gap-2 mb-1">
                                     {/* Checkbox for marking complete */}
@@ -694,7 +697,10 @@ export default function DailyTaskChecklist() {
                             ? 'bg-gray-200 border-gray-400' 
                             : 'bg-white border-gray-300 hover:border-gray-400 cursor-pointer'
                         }`}
-                        onClick={() => handleTaskClick(task)}
+                        onClick={() => {
+                          if (!task.completed) handleQuickComplete(task);
+                          else handleTaskClick(task);
+                        }}
                       >
                         {task.completed ? (
                           // Completed task layout
@@ -796,6 +802,10 @@ export default function DailyTaskChecklist() {
                     <div
                       key={task.id}
                       className={`p-2 border rounded-lg bg-white border-gray-300 hover:border-gray-400`}
+                      onClick={() => handleQuickComplete(task)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleQuickComplete(task); }}
                     >
                       {/* Pending task layout */}
                       <div className="flex items-center justify-between border-b last:border-b-0 px-4 py-2 bg-white hover:bg-gray-50 transition">
